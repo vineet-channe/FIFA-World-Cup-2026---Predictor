@@ -1,0 +1,61 @@
+# Data collection
+requests==2.31.0
+beautifulsoup4==4.12.3
+selenium==4.18.1
+kaggle==1.6.6
+pandas-datareader==0.10.0
+
+# FBref scraping (Cloudflare bypass — requires real Chrome)
+# nodriver drives a real non-headless Chrome to solve Cloudflare JS challenges.
+# Run `python -m playwright install chromium` after install.
+nodriver==0.50.3
+playwright==1.60.0
+playwright-stealth==2.0.3
+curl_cffi==0.15.0
+
+# Data processing
+pandas==2.2.0
+numpy==1.26.4
+pyarrow==15.0.0
+scipy==1.12.0
+
+# ML — core
+scikit-learn==1.4.0
+xgboost==2.0.3
+lightgbm==4.3.0
+statsmodels==0.14.1
+
+# ML — deep learning
+torch==2.2.0
+torchvision==0.17.0
+
+# Hyperparameter optimisation
+optuna==3.5.0
+optuna-integration[sklearn]==3.5.0
+
+# Experiment tracking
+mlflow==2.10.0
+dvc==3.40.0
+
+# Dashboard (MVP)
+streamlit==1.31.0
+plotly==5.18.0
+altair==5.2.0
+
+# Database
+psycopg2-binary==2.9.9
+sqlalchemy==2.0.27
+redis==5.0.1
+
+# Scheduling / automation
+apscheduler==3.10.4
+
+# Utilities
+python-dotenv==1.0.1
+pydantic==2.6.0
+loguru==0.7.2
+tqdm==4.66.2
+PyYAML==6.0.1
+
+# Calibration
+scikit-learn>=1.4.0  # includes CalibratedClassifierCV
