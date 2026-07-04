@@ -31,6 +31,7 @@ class Settings(_base):
 
     # APIs
     API_FOOTBALL_KEY: str = ""
+    FOOTBALL_DATA_API_KEY: str = ""
     KAGGLE_USERNAME: str = ""
     KAGGLE_KEY: str = ""
 

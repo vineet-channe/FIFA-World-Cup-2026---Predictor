@@ -14,6 +14,8 @@ __all__ = [
     "CANONICAL_NAMES",
     "WC2026_CANONICAL_TEAMS",
     "WC2026_GROUPS",
+    "TEAM_ISO_CODES",
+    "get_flag_emoji",
     "normalise",
     "normalise_dataframe",
     "audit_mismatches",
@@ -166,6 +168,244 @@ WC2026_CANONICAL_TEAMS: list[str] = [
 assert len(WC2026_CANONICAL_TEAMS) == 48, (
     f"Expected 48 WC 2026 teams, got {len(WC2026_CANONICAL_TEAMS)}"
 )
+
+
+# ---------------------------------------------------------------------------
+# ISO 3166-1 alpha-2 codes for all 48 WC 2026 nations + common others
+# ---------------------------------------------------------------------------
+# England, Scotland, Wales use GB-ENG/GB-SCT/GB-WLS subdivision codes — these
+# do NOT map to standard flag emoji (which require exactly 2 letters), so they
+# fall back to "⚽" in get_flag_emoji().
+
+TEAM_ISO_CODES: dict[str, str] = {
+    # Group A
+    "Mexico":               "MX",
+    "South Africa":         "ZA",
+    "South Korea":          "KR",
+    "Czechia":              "CZ",
+    # Group B
+    "USA":                  "US",
+    "Paraguay":             "PY",
+    "Australia":            "AU",
+    "Turkey":               "TR",
+    # Group C
+    "Canada":               "CA",
+    "Bosnia & Herzegovina": "BA",
+    "Qatar":                "QA",
+    "Switzerland":          "CH",
+    # Group D
+    "Germany":              "DE",
+    "Curaçao":              "CW",
+    "Ivory Coast":          "CI",
+    "Ecuador":              "EC",
+    # Group E
+    "Netherlands":          "NL",
+    "Japan":                "JP",
+    "Sweden":               "SE",
+    "Tunisia":              "TN",
+    # Group F
+    "Brazil":               "BR",
+    "Morocco":              "MA",
+    "Scotland":             "GB",   # GB-SCT not a 2-letter code → falls back to ⚽
+    "Haiti":                "HT",
+    # Group G
+    "France":               "FR",
+    "Senegal":              "SN",
+    "Iraq":                 "IQ",
+    "Norway":               "NO",
+    # Group H
+    "Spain":                "ES",
+    "Cape Verde":           "CV",
+    "Saudi Arabia":         "SA",
+    "Uruguay":              "UY",
+    # Group I
+    "Belgium":              "BE",
+    "Egypt":                "EG",
+    "Iran":                 "IR",
+    "New Zealand":          "NZ",
+    # Group J
+    "England":              "GB",   # GB-ENG not a 2-letter code → falls back to ⚽
+    "Croatia":              "HR",
+    "Ghana":                "GH",
+    "Panama":               "PA",
+    # Group K
+    "Portugal":             "PT",
+    "DR Congo":             "CD",
+    "Uzbekistan":           "UZ",
+    "Colombia":             "CO",
+    # Group L
+    "Argentina":            "AR",
+    "Algeria":              "DZ",
+    "Austria":              "AT",
+    "Jordan":               "JO",
+    # Extra common nations (not in WC 2026 field but appear in historical data)
+    "Italy":                "IT",
+    "Belgium":              "BE",
+    "Poland":               "PL",
+    "Denmark":              "DK",
+    "Serbia":               "RS",
+    "Ukraine":              "UA",
+    "Romania":              "RO",
+    "Hungary":              "HU",
+    "Russia":               "RU",
+    "Chile":                "CL",
+    "Peru":                 "PE",
+    "Bolivia":              "BO",
+    "Venezuela":            "VE",
+    "Costa Rica":           "CR",
+    "Honduras":             "HN",
+    "El Salvador":          "SV",
+    "Jamaica":              "JM",
+    "Trinidad & Tobago":    "TT",
+    "Cameroon":             "CM",
+    "Nigeria":              "NG",
+    "Mali":                 "ML",
+    "Zambia":               "ZM",
+    "Zimbabwe":             "ZW",
+    "Kenya":                "KE",
+    "Tanzania":             "TZ",
+    "Burkina Faso":         "BF",
+    "Guinea":               "GN",
+    "Mozambique":           "MZ",
+    "Libya":                "LY",
+    "Sudan":                "SD",
+    "Ethiopia":             "ET",
+    "China":                "CN",
+    "India":                "IN",
+    "Indonesia":            "ID",
+    "Thailand":             "TH",
+    "Vietnam":              "VN",
+    "Philippines":          "PH",
+    "Malaysia":             "MY",
+    "Singapore":            "SG",
+    "Pakistan":             "PK",
+    "Afghanistan":          "AF",
+    "Syria":                "SY",
+    "Lebanon":              "LB",
+    "Palestine":            "PS",
+    "Kuwait":               "KW",
+    "Bahrain":              "BH",
+    "UAE":                  "AE",
+    "Oman":                 "OM",
+    "Yemen":                "YE",
+    "Greece":               "GR",
+    "Finland":              "FI",
+    "Czech Republic":       "CZ",
+    "Slovakia":             "SK",
+    "Slovenia":             "SI",
+    "Bulgaria":             "BG",
+    "Albania":              "AL",
+    "Kosovo":               "XK",
+    "North Macedonia":      "MK",
+    "Iceland":              "IS",
+    "Ireland":              "IE",
+    "Wales":                "GB",   # GB-WLS not a 2-letter code → falls back to ⚽
+    "Northern Ireland":     "GB",
+    "Luxembourg":           "LU",
+    "Malta":                "MT",
+    "Cyprus":               "CY",
+    "Armenia":              "AM",
+    "Azerbaijan":           "AZ",
+    "Georgia":              "GE",
+    "Kazakhstan":           "KZ",
+    "Belarus":              "BY",
+    "Moldova":              "MD",
+    "Estonia":              "EE",
+    "Latvia":               "LV",
+    "Lithuania":            "LT",
+    "North Korea":          "KP",
+    "Taiwan":               "TW",
+    "Hong Kong":            "HK",
+    "Macau":                "MO",
+    "Mongolia":             "MN",
+    "Nepal":                "NP",
+    "Sri Lanka":            "LK",
+    "Bangladesh":           "BD",
+    "Myanmar":              "MM",
+    "Cambodia":             "KH",
+    "Laos":                 "LA",
+    "Brunei":               "BN",
+    "Maldives":             "MV",
+    "Bhutan":               "BT",
+    "Timor-Leste":          "TL",
+    "Cuba":                 "CU",
+    "Dominican Republic":   "DO",
+    "Guatemala":            "GT",
+    "Nicaragua":            "NI",
+    "Belize":               "BZ",
+    "Guyana":               "GY",
+    "Suriname":             "SR",
+    "Barbados":             "BB",
+    "Bahamas":              "BS",
+    "Bermuda":              "BM",
+    "Libya":                "LY",
+    "Tunisia":              "TN",
+    "Morocco":              "MA",
+    "Egypt":                "EG",
+    "Algeria":              "DZ",
+    "South Sudan":          "SS",
+    "Rwanda":               "RW",
+    "Uganda":               "UG",
+    "Angola":               "AO",
+    "Namibia":              "NA",
+    "Botswana":             "BW",
+    "Lesotho":              "LS",
+    "Eswatini":             "SZ",
+    "Madagascar":           "MG",
+    "Mauritius":            "MU",
+    "Seychelles":           "SC",
+    "Benin":                "BJ",
+    "Togo":                 "TG",
+    "Ghana":                "GH",
+    "Niger":                "NE",
+    "Chad":                 "TD",
+    "Gabon":                "GA",
+    "Congo":                "CG",
+    "Equatorial Guinea":    "GQ",
+    "São Tomé and Príncipe": "ST",
+    "Cape Verde":           "CV",
+    "Gambia":               "GM",
+    "Guinea-Bissau":        "GW",
+    "Sierra Leone":         "SL",
+    "Liberia":              "LR",
+    "Côte d'Ivoire":        "CI",
+    "New Caledonia":        "NC",
+    "Fiji":                 "FJ",
+    "Papua New Guinea":     "PG",
+    "Vanuatu":              "VU",
+    "Solomon Islands":      "SB",
+    "Tahiti":               "PF",
+    "American Samoa":       "AS",
+}
+
+# Teams where the standard 2-letter ISO code does NOT produce a valid flag emoji
+# (subdivisions like GB-ENG, GB-SCT, GB-WLS use 5-char codes)
+_NO_FLAG_TEAMS: frozenset[str] = frozenset({"England", "Scotland", "Wales", "Northern Ireland"})
+
+
+def get_flag_emoji(team_name: str) -> str:
+    """Convert a canonical team name to a flag emoji via ISO 3166-1 alpha-2 code.
+
+    Uses the Regional Indicator Symbol Letter approach: pair of Unicode code
+    points 0x1F1E6–0x1F1FF corresponding to letters A–Z. Falls back to ⚽ if
+    the team is unknown or uses a subdivision code that does not have a standard
+    emoji (England, Scotland, Wales).
+
+    Args:
+        team_name: Canonical team name (as used in WC2026_CANONICAL_TEAMS).
+
+    Returns:
+        Two-character flag emoji string, or "⚽" as fallback.
+    """
+    if team_name in _NO_FLAG_TEAMS:
+        return "⚽"
+    code = TEAM_ISO_CODES.get(team_name)
+    if not code or len(code) != 2:
+        return "⚽"
+    try:
+        return "".join(chr(0x1F1E6 + ord(c) - ord("A")) for c in code.upper())
+    except Exception:
+        return "⚽"
 
 
 # ---------------------------------------------------------------------------

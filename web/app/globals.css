@@ -1,0 +1,66 @@
+@import "tailwindcss";
+@import "flag-icons/css/flag-icons.min.css";
+
+/* ── Design tokens ─────────────────────────────────────────────────────────── */
+:root {
+  --ink:         #10140F;
+  --ink-raised:  #181D17;
+  --chalk:       #F5F3EC;
+  --turf:        #1F6F4A;
+  --turf-bright: #2FA06B;
+  --gold:        #C9A227;
+  --amber:       #E2A33D;
+  --red:         #C23B33;
+  --line:        rgba(245, 243, 236, 0.12);
+}
+
+/* ── Tailwind v4 theme extension ───────────────────────────────────────────── */
+@theme {
+  /* Colours mapped so bg-turf, text-gold, etc. work */
+  --color-ink:         var(--ink);
+  --color-ink-raised:  var(--ink-raised);
+  --color-chalk:       var(--chalk);
+  --color-turf:        var(--turf);
+  --color-turf-bright: var(--turf-bright);
+  --color-gold:        var(--gold);
+  --color-amber:       var(--amber);
+  --color-red:         var(--red);
+
+  /* Font families — matching exact Google Fonts names from the <link> in layout.tsx */
+  --font-display: "Big Shoulders Display", "Barlow Condensed", sans-serif;
+  --font-body:    "Inter", system-ui, sans-serif;
+  --font-mono:    "IBM Plex Mono", "Courier New", monospace;
+}
+
+/* ── Base styles ────────────────────────────────────────────────────────────── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: var(--ink);
+  color: var(--chalk);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  min-height: 100dvh;
+}
+
+/* Focus rings — turf-bright, never browser blue */
+:focus-visible {
+  outline: 2px solid var(--turf-bright);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--ink); }
+::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(245,243,236,0.25); }

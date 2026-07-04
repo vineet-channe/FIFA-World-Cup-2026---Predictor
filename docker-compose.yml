@@ -22,18 +22,24 @@ services:
       - "5000:5000"
     command: mlflow server --host 0.0.0.0 --port 5000
 
-  dashboard:
+  api:
     build: .
-    command: streamlit run src/dashboard/app.py --server.port 8501
+    command: uvicorn src.api.main:app --host 0.0.0.0 --port 8000
     ports:
-      - "8501:8501"
-    depends_on:
-      - db
-      - redis
-    env_file: .env
+      - "8000:8000"
     volumes:
       - ./data:/app/data
       - ./models:/app/models
+
+  web:
+    build: ./web
+    command: npm run dev
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://api:8000
+    depends_on:
+      - api
 
   retrain_scheduler:
     build: .

@@ -76,7 +76,8 @@ FEATURE_COLS_LINEAR: list[str] = [
 # Backwards-compatible alias imported by existing pipeline / Phase 3 code.
 FEATURE_COLS = FEATURE_COLS_TREES
 
-
+META_COLS = ["match_date", "team_a", "team_b", "tournament", "is_neutral"]
+TARGET_COLS = ["outcome", "goals_a", "goals_b"]
 
 def _build_team_elo_index(elo_df: pd.DataFrame) -> dict[str, pd.DataFrame]:
     """Pre-index Elo data by team for O(1) per-team lookups."""
