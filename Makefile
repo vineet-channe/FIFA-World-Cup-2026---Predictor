@@ -1,4 +1,4 @@
-.PHONY: api web install install-web catchup pipeline scheduler rebuild-groups rebuild-groups-dry verify-snapshots
+.PHONY: api web install install-web catchup pipeline scheduler rebuild-groups rebuild-groups-dry verify-snapshots snapshot-check
 
 api:
 	source worldcup/bin/activate && uvicorn src.api.main:app --reload --port 8000
@@ -32,3 +32,6 @@ rebuild-groups-dry:
 verify-snapshots:
 	source worldcup/bin/activate && \
 	python scripts/verify_snapshots.py
+
+snapshot-check:
+	source worldcup/bin/activate && python scripts/save_snapshot.py --check

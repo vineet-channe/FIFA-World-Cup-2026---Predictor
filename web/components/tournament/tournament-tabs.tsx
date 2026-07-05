@@ -4,10 +4,24 @@ import { useState } from "react";
 import { TournamentBracket } from "@/lib/types";
 import { GroupWallChart } from "@/components/wall-chart/group-wall-chart";
 import { KnockoutRound } from "@/components/tournament/knockout-round";
+import { RoundPending } from "@/components/ui/round-pending";
+
+const ALL_ROUNDS: { round_key: string; round_name: string }[] = [
+  { round_key: "groups", round_name: "Group Stage" },
+  { round_key: "r32", round_name: "Round of 32" },
+  { round_key: "r16", round_name: "Round of 16" },
+  { round_key: "qf", round_name: "Quarter-finals" },
+  { round_key: "sf", round_name: "Semi-finals" },
+  { round_key: "3rd", round_name: "3rd Place" },
+  { round_key: "final", round_name: "Final" },
+];
 
 export function TournamentTabs({ bracket }: { bracket: TournamentBracket }) {
-  const [active, setActive] = useState(bracket.rounds[0]?.round_key ?? "groups");
-  const activeRound = bracket.rounds.find((r) => r.round_key === active);
+  const roundMap = new Map(bracket.rounds.map((r) => [r.round_key, r]));
+  const [active, setActive] = useState(
+    bracket.rounds[bracket.rounds.length - 1]?.round_key ?? "groups"
+  );
+  const activeRound = roundMap.get(active);
 
   if (!bracket.rounds.length) {
     return (
@@ -34,54 +48,66 @@ export function TournamentTabs({ bracket }: { bracket: TournamentBracket }) {
           marginBottom: 24,
         }}
       >
-        {bracket.rounds.map((round) => (
-          <button
-            key={round.round_key}
-            type="button"
-            onClick={() => setActive(round.round_key)}
-            style={{
-              padding: "8px 16px",
-              fontSize: 13,
-              background: "none",
-              border: "none",
-              borderBottom:
-                active === round.round_key
-                  ? "2px solid var(--turf)"
-                  : "2px solid transparent",
-              color:
-                active === round.round_key
-                  ? "var(--chalk)"
-                  : "rgba(245,243,236,0.45)",
-              cursor: "pointer",
-              whiteSpace: "nowrap",
-              fontFamily: "var(--font-body)",
-              fontWeight: active === round.round_key ? 500 : 400,
-              marginBottom: -1,
-            }}
-          >
-            {round.round_name}
-            <span
+        {ALL_ROUNDS.map((def) => {
+          const round = roundMap.get(def.round_key);
+          const hasData = round && round.total > 0;
+          return (
+            <button
+              key={def.round_key}
+              type="button"
+              onClick={() => setActive(def.round_key)}
               style={{
-                marginLeft: 6,
-                fontSize: 10,
-                fontFamily: "var(--font-mono)",
+                padding: "8px 16px",
+                fontSize: 13,
+                background: "none",
+                border: "none",
+                borderBottom:
+                  active === def.round_key
+                    ? "2px solid var(--turf)"
+                    : "2px solid transparent",
                 color:
-                  round.completed === round.total
-                    ? "var(--turf)"
-                    : "rgba(245,243,236,0.3)",
+                  active === def.round_key
+                    ? "var(--chalk)"
+                    : hasData
+                    ? "rgba(245,243,236,0.45)"
+                    : "rgba(245,243,236,0.25)",
+                cursor: "pointer",
+                whiteSpace: "nowrap",
+                fontFamily: "var(--font-body)",
+                fontWeight: active === def.round_key ? 500 : 400,
+                marginBottom: -1,
               }}
             >
-              {round.completed}/{round.total}
-            </span>
-          </button>
-        ))}
+              {def.round_name}
+              {hasData && (
+                <span
+                  style={{
+                    marginLeft: 6,
+                    fontSize: 10,
+                    fontFamily: "var(--font-mono)",
+                    color:
+                      round.completed === round.total
+                        ? "var(--turf)"
+                        : "rgba(245,243,236,0.3)",
+                  }}
+                >
+                  {round.completed}/{round.total}
+                </span>
+              )}
+            </button>
+          );
+        })}
       </div>
 
-      {activeRound?.round_key === "groups" ? (
+      {!activeRound || activeRound.total === 0 ? (
+        <RoundPending
+          roundName={ALL_ROUNDS.find((r) => r.round_key === active)?.round_name ?? active}
+        />
+      ) : activeRound.round_key === "groups" ? (
         <GroupWallChart matches={activeRound.matches} />
-      ) : activeRound ? (
+      ) : (
         <KnockoutRound round={activeRound} />
-      ) : null}
+      )}
     </div>
   );
 }

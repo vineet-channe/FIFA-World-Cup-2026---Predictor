@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { clsx } from "clsx";
 
@@ -18,12 +19,45 @@ export function Nav() {
 
   return (
     <>
+      {/* ── Mobile top brand bar ── */}
+      <div
+        className="md:hidden flex items-center gap-2.5 px-4 h-12 border-b bg-[var(--ink)]"
+        style={{ borderColor: "var(--line)" }}
+      >
+        <Link href="/" className="flex items-center gap-2.5 min-w-0">
+          <Image
+            src="/fifa-wc2026-logo-white.png"
+            alt="FIFA World Cup 2026"
+            width={24}
+            height={40}
+            className="h-8 w-auto shrink-0"
+            priority
+          />
+          <span className="font-display text-[11px] font-bold tracking-wide text-[var(--chalk)] truncate">
+            FIFA WORLD CUP 2026
+          </span>
+        </Link>
+      </div>
+
       {/* ── Desktop sticky header ── */}
       <header className="hidden md:flex sticky top-0 z-50 items-center justify-between px-6 h-14 border-b bg-[var(--ink)]"
         style={{ borderColor: "var(--line)" }}>
-        <span className="font-display text-xl font-bold tracking-tight text-[var(--chalk)]">
-          ⚽ WC26
-        </span>
+        <Link href="/" className="flex items-center gap-3 shrink-0">
+          <Image
+            src="/fifa-wc2026-logo-white.png"
+            alt="FIFA World Cup 2026"
+            width={32}
+            height={52}
+            className="h-10 w-auto"
+            priority
+          />
+          <span
+            className="font-display text-sm font-bold tracking-wide text-[var(--chalk)] leading-tight"
+            style={{ letterSpacing: "0.06em" }}
+          >
+            FIFA WORLD CUP 2026
+          </span>
+        </Link>
         <nav className="flex gap-1">
           {NAV_ITEMS.map(({ href, label }) => {
             const active = href === "/" ? pathname === "/" : pathname.startsWith(href);

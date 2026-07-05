@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
@@ -23,6 +24,7 @@ from src.api.schemas import (
 )
 from src.api.prediction_lookup import enrich_completed_match, invalidate_prediction_index
 from src.api.sim_loader import load_simulation
+from src.retraining.run_status import get_run_status
 from src.retraining.snapshots import (
     list_snapshots,
     load_snapshot,
@@ -30,6 +32,8 @@ from src.retraining.snapshots import (
 )
 
 router = APIRouter()
+
+STALE_THRESHOLD_HOURS = 18
 
 _comp_cache:  dict | None = None
 
@@ -336,20 +340,38 @@ def get_probability_history_endpoint(team: str):
     return {"team": team, "history": history}
 
 
+def _compute_staleness(last_updated: str | None) -> bool:
+    if not last_updated or last_updated == "unknown":
+        return True
+    try:
+        dt = datetime.fromisoformat(last_updated.replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        age_hours = (datetime.now(timezone.utc) - dt).total_seconds() / 3600
+        return age_hours > STALE_THRESHOLD_HOURS
+    except Exception:
+        return True
+
+
 @router.get("/meta", response_model=MetaInfo)
 def get_meta() -> MetaInfo:
-    """Return sidebar/header status metadata."""
+    """Return sidebar/header status metadata, including staleness check."""
+    run_status = get_run_status()
     try:
         sim = _load_sim()
+        info = _meta_from_sim(sim)
     except HTTPException:
         comp = _load_comparison()
-        return MetaInfo(
+        info = MetaInfo(
             model_version="ensemble_v1",
             last_simulation="unknown",
             n_simulations=0,
             ensemble_brier_wc2022=comp.get("ensemble_wc2022_brier"),
         )
-    return _meta_from_sim(sim)
+
+    info.is_stale = _compute_staleness(info.last_updated or info.last_simulation)
+    info.run_status = run_status.get("status", "unknown")
+    return info
 
 
 @router.get("/tournament-bracket", response_model=TournamentBracket)

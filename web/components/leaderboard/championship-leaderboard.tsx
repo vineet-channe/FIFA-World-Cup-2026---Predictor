@@ -1,6 +1,7 @@
 import { getTeams, getGroups, getMeta } from "@/lib/api";
 import { getKitColor, getFlagClass } from "@/lib/flags";
 import { FlipNumber } from "@/components/ui/flip-number";
+import { AboutSection } from "@/components/ui/about-section";
 import type { TeamSummary } from "@/lib/types";
 
 interface TeamProbRecord {
@@ -151,6 +152,8 @@ export async function ChampionshipLeaderboard() {
           </div>
         </div>
       )}
+
+      <AboutSection />
 
       {/* Full data table */}
       <FullTable sorted={sorted} teamProbs={teamProbs} />

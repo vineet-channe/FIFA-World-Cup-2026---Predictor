@@ -97,6 +97,8 @@ class MetaInfo(BaseModel):
     matches_played: int | None = None
     matches_total: int | None = None
     last_updated: str | None = None
+    is_stale: bool = False
+    run_status: str = "unknown"     # "ok" | "failed" | "running" | "unknown"
 
 
 class MatchResultCard(BaseModel):

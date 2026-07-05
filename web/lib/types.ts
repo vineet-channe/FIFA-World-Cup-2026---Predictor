@@ -86,6 +86,8 @@ export interface MetaInfo {
   matches_played?: number | null;
   matches_total?: number | null;
   last_updated?: string | null;
+  is_stale: boolean;
+  run_status: "ok" | "failed" | "running" | "unknown";
 }
 
 export interface TopFeature {

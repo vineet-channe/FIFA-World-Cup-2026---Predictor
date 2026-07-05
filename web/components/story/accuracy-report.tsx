@@ -11,6 +11,7 @@ import {
   Scatter,
 } from "recharts";
 import { FlipNumber } from "@/components/ui/flip-number";
+import { RoundPending } from "@/components/ui/round-pending";
 import type { StoryAccuracy } from "@/lib/types";
 
 interface AccuracyReportProps {
@@ -46,7 +47,8 @@ export function AccuracyReport({ data }: AccuracyReportProps) {
           Honest Accuracy
         </h2>
         <p className="text-xs text-[var(--chalk)] opacity-40">
-          Point-in-time evaluation only — each snapshot scored against the round it predicted
+          Point-in-time evaluation only — each snapshot scored against the round it predicted.
+          Overall accuracy and Brier update after each round.
         </p>
       </div>
 
@@ -103,12 +105,18 @@ export function AccuracyReport({ data }: AccuracyReportProps) {
         <div className="space-y-2">
           {data.per_stage.map((s) => {
             const pending = s.status === "round not yet played";
+            if (pending) {
+              return (
+                <RoundPending
+                  key={s.stage}
+                  roundName={s.predicts_round}
+                />
+              );
+            }
             return (
               <div
                 key={s.stage}
-                className={`grid grid-cols-[1fr,auto,auto,120px,64px] gap-3 items-center bg-[var(--ink-raised)] rounded-lg px-4 py-3 text-sm ${
-                  pending ? "opacity-40" : ""
-                }`}
+                className="grid grid-cols-[1fr,auto,auto,120px,64px] gap-3 items-center bg-[var(--ink-raised)] rounded-lg px-4 py-3 text-sm"
               >
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-medium">{s.display_long ?? s.display}</span>
@@ -117,9 +125,9 @@ export function AccuracyReport({ data }: AccuracyReportProps) {
                   </span>
                 </div>
                 <span className="font-mono text-xs opacity-50">
-                  {pending ? s.status : `n = ${s.n_matches}`}
+                  {`n = ${s.n_matches}`}
                 </span>
-                {!pending && s.correct_pct != null && (
+                {s.correct_pct != null && (
                   <>
                     <span className="font-mono text-xs">
                       {(s.correct_pct * 100).toFixed(0)}%
@@ -138,7 +146,6 @@ export function AccuracyReport({ data }: AccuracyReportProps) {
                     </span>
                   </>
                 )}
-                {pending && <span className="col-span-3" />}
               </div>
             );
           })}
