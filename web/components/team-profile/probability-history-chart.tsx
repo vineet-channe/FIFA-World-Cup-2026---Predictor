@@ -101,7 +101,7 @@ export function ProbabilityHistoryChart({ team }: { team: string }) {
               fontSize: 12,
               color: "var(--chalk)",
             }}
-            formatter={(v: number) => [`${v}%`]}
+            formatter={(v) => [`${typeof v === "number" ? v : 0}%`]}
           />
           {elimPoint && (
             <ReferenceLine

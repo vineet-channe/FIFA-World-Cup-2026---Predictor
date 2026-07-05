@@ -178,6 +178,7 @@ def main(dry_run: bool = False, n_sim: int = 10_000) -> None:
         actual_results=actual_at_groups,
         lgbm_model=pipeline.current_lgbm,
         lgbm_blend_weight=blend_weight,
+        save_live=False,  # historical snapshot only — do not clobber live sim
     )
 
     # ── 8. Verify before saving ───────────────────────────────────────────────

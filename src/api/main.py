@@ -20,7 +20,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
-from src.api.routers import model, predict, simulation, teams
+from src.api.routers import model, predict, simulation, story, teams
 
 app = FastAPI(
     title="WC 2026 Predictor API",
@@ -39,6 +39,7 @@ app.include_router(teams.router,      prefix="/api")
 app.include_router(simulation.router, prefix="/api")
 app.include_router(predict.router,    prefix="/api")
 app.include_router(model.router,      prefix="/api")
+app.include_router(story.router,      prefix="/api")
 
 
 def _find_latest_lgbm() -> Path | None:

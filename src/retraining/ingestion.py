@@ -252,6 +252,59 @@ def get_bracket() -> list[dict]:
     return bracket
 
 
+def enrich_knockout_fixtures(
+    knockout: list[dict],
+    all_fixtures: list[dict],
+) -> list[dict]:
+    """
+    Prefer the main /matches feed when the stage-specific endpoint is stale.
+
+    football-data.org sometimes returns R32 as SCHEDULED on the LAST_32
+    endpoint even after full-time results exist on the competition matches list.
+    """
+    by_id = {f["fixture_id"]: f for f in all_fixtures}
+    enriched: list[dict] = []
+    for match in knockout:
+        latest = by_id.get(match["fixture_id"])
+        if (
+            latest
+            and latest["status"] == "FT"
+            and latest.get("home_score") is not None
+        ):
+            enriched.append(latest)
+        else:
+            enriched.append(match)
+    return enriched
+
+
+def fixture_to_result_entry(fixture: dict) -> dict:
+    """Normalise one completed fixture into an actual_results row."""
+    return {
+        "team_a": fixture["home_team"],
+        "team_b": fixture["away_team"],
+        "score_a": fixture["home_score"],
+        "score_b": fixture["away_score"],
+        "round": fixture["round"],
+        "played": True,
+        "winner": (
+            fixture["home_team"]
+            if fixture.get("home_winner")
+            else fixture["away_team"]
+            if fixture.get("away_winner")
+            else None
+        ),
+    }
+
+
+def completed_fixtures(all_fixtures: list[dict]) -> list[dict]:
+    """All finished matches with a recorded score."""
+    return [
+        f
+        for f in all_fixtures
+        if f["status"] == "FT" and f.get("home_score") is not None
+    ]
+
+
 def save_raw_results(fixtures: list[dict]) -> None:
     """Cache raw normalised fixtures for reproducibility / audit."""
     RESULTS_PATH.parent.mkdir(parents=True, exist_ok=True)

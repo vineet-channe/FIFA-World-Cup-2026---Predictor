@@ -2,10 +2,14 @@ import type {
   AccuracyStats,
   GroupData,
   H2HMatch,
+  MatchExplanation,
   MatchPredictionHistory,
   MetaInfo,
   ModelComparison,
   PredictResponse,
+  StoryAccuracy,
+  StoryEvolution,
+  StoryMovers,
   TeamDetail,
   TeamSummary,
   TournamentBracket,
@@ -94,4 +98,31 @@ export async function getMatchPredictionHistory(
 
 export async function getAccuracy(): Promise<AccuracyStats> {
   return apiFetch<AccuracyStats>("/api/accuracy");
+}
+
+export async function getStoryEvolution(): Promise<StoryEvolution> {
+  return apiFetch<StoryEvolution>("/api/story/evolution");
+}
+
+export async function getStoryMovers(
+  fromStage: string,
+  toStage: string
+): Promise<StoryMovers> {
+  return apiFetch<StoryMovers>(
+    `/api/story/movers?from_stage=${encodeURIComponent(fromStage)}&to_stage=${encodeURIComponent(toStage)}`
+  );
+}
+
+export async function getStoryAccuracy(): Promise<StoryAccuracy> {
+  return apiFetch<StoryAccuracy>("/api/story/accuracy");
+}
+
+export async function getMatchExplanation(
+  teamA: string,
+  teamB: string,
+  stage: string
+): Promise<MatchExplanation> {
+  return apiFetch<MatchExplanation>(
+    `/api/story/match-explanation?team_a=${encodeURIComponent(teamA)}&team_b=${encodeURIComponent(teamB)}&stage=${encodeURIComponent(stage)}`
+  );
 }

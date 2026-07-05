@@ -188,12 +188,22 @@ def build_tournament_state(
             loser = m["team_b"] if m["winner"] == m["team_a"] else m["team_a"]
             eliminated.add(loser)
 
+    r32_complete = len(r32_matches) == 16 and all(
+        m["status"] == "FT" for m in r32_matches
+    )
+    if r32_complete:
+        current_round = "Round of 16"
+    elif group_stage_complete:
+        current_round = "Round of 32"
+    else:
+        current_round = "Group Stage"
+
     return {
         "group_stage_complete": group_stage_complete,
         "group_standings": qualified,
         "r32_matches": r32_matches,
         "eliminated_teams": list(eliminated),
-        "current_round": "Round of 32",
+        "current_round": current_round,
     }
 
 
@@ -379,10 +389,14 @@ def run_live_simulation(
     actual_results: dict | None = None,
     lgbm_model=None,
     lgbm_blend_weight: float = 0.0,
+    save_live: bool = True,
 ) -> dict:
     """
     Simulate the remaining tournament from the current real state.
     Completed matches are fixed facts; only future matches are simulated.
+
+    Set save_live=False when rebuilding a historical snapshot so this does not
+    overwrite data/predictions/tournament_simulation.json.
     """
     r32 = state["r32_matches"]
     ordered_r32 = order_r32_matches(r32)
@@ -760,14 +774,18 @@ def run_live_simulation(
         "group_predictions": {},
     }
 
-    with open(SIM_PATH, "w") as f:
-        json.dump(output, f, indent=2)
+    if save_live:
+        with open(SIM_PATH, "w") as f:
+            json.dump(output, f, indent=2)
 
-    ts = pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
-    bak = SIM_PATH.parent / "history" / f"{ts}_simulation.json"
-    bak.parent.mkdir(parents=True, exist_ok=True)
-    with open(bak, "w") as f:
-        json.dump(output, f, indent=2)
+        ts = pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
+        bak = SIM_PATH.parent / "history" / f"{ts}_simulation.json"
+        bak.parent.mkdir(parents=True, exist_ok=True)
+        with open(bak, "w") as f:
+            json.dump(output, f, indent=2)
 
-    logger.info(f"Live simulation complete. Saved to {SIM_PATH} + backup {bak.name}")
+        logger.info(f"Live simulation complete. Saved to {SIM_PATH} + backup {bak.name}")
+    else:
+        logger.info("Simulation complete (save_live=False — live file not overwritten)")
+
     return output

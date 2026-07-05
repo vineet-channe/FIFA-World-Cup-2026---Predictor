@@ -9,6 +9,7 @@ const NAV_ITEMS = [
   { href: "/tournament", label: "Tournament", icon: "⚽" },
   { href: "/predictor", label: "Predictor",  icon: "🔮" },
   { href: "/teams",     label: "Teams",      icon: "📊" },
+  { href: "/story",     label: "Story",      icon: "📖" },
   { href: "/lab",       label: "Lab",        icon: "🧪" },
 ];
 

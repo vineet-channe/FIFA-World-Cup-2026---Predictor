@@ -100,20 +100,20 @@ function BracketMatchRow({ match }: { match: MatchResultCard }) {
         <div
           className="rounded-l"
           style={{
-            width: `${match.p_team_a_win * 100}%`,
+            width: `${(match.p_team_a_win ?? 0) * 100}%`,
             backgroundColor: "var(--turf)",
           }}
         />
         <div
           style={{
-            width: `${match.p_draw * 100}%`,
+            width: `${(match.p_draw ?? 0) * 100}%`,
             backgroundColor: "var(--amber)",
           }}
         />
         <div
           className="rounded-r"
           style={{
-            width: `${match.p_team_b_win * 100}%`,
+            width: `${(match.p_team_b_win ?? 0) * 100}%`,
             backgroundColor: "var(--red)",
           }}
         />
@@ -121,18 +121,18 @@ function BracketMatchRow({ match }: { match: MatchResultCard }) {
       <div className="flex justify-between mt-0.5 opacity-50">
         <span>
           <FlipNumber
-            value={match.p_team_a_win * 100}
+            value={(match.p_team_a_win ?? 0) * 100}
             format="decimal"
             decimals={0}
           />
           %
         </span>
         <span>
-          {Math.round(match.expected_score_a)}–{Math.round(match.expected_score_b)}
+          {Math.round(match.expected_score_a ?? 0)}–{Math.round(match.expected_score_b ?? 0)}
         </span>
         <span>
           <FlipNumber
-            value={match.p_team_b_win * 100}
+            value={(match.p_team_b_win ?? 0) * 100}
             format="decimal"
             decimals={0}
           />

@@ -16,10 +16,12 @@ from src.models.ensemble import load_ensemble
 from src.models.dixon_coles import DixonColesModel
 from src.retraining.ingestion import (
     get_all_fixtures,
-    get_all_completed_fixtures,
     get_standings,
     get_bracket,
     save_raw_results,
+    enrich_knockout_fixtures,
+    completed_fixtures,
+    fixture_to_result_entry,
 )
 from src.retraining.elo_updater import update_elo_with_results
 from src.retraining.retrain import (
@@ -57,13 +59,16 @@ class LiveRetrainPipeline:
             run_name=f"live_retrain_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}",
         ):
             all_fixtures = get_all_fixtures()
-            fixtures = get_all_completed_fixtures()
+            fixtures = completed_fixtures(all_fixtures)
             standings = get_standings()
-            bracket = get_bracket()
+            bracket = enrich_knockout_fixtures(get_bracket(), all_fixtures)
             save_raw_results(all_fixtures)
             mlflow.log_metric("n_completed_fixtures", len(fixtures))
             mlflow.log_metric("n_total_fixtures", len(all_fixtures))
-            logger.info(f"Ingested: {len(fixtures)} completed fixtures")
+            logger.info(
+                f"Ingested: {len(fixtures)} completed fixtures "
+                f"({sum(1 for f in fixtures if f['round'] == 'Round of 32')} R32)"
+            )
 
             elo_df = pd.read_parquet(settings.DATA_DIR / "processed" / "elo_clean.parquet")
             elo_df["date"] = pd.to_datetime(elo_df["date"])
@@ -126,23 +131,7 @@ class LiveRetrainPipeline:
             state = build_tournament_state(fixtures, standings, bracket)
 
             actual_results = {
-                str(f["fixture_id"]): {
-                    "team_a": f["home_team"],
-                    "team_b": f["away_team"],
-                    "score_a": f["home_score"],
-                    "score_b": f["away_score"],
-                    "round": f["round"],
-                    "played": True,
-                    "winner": (
-                        f["home_team"]
-                        if f.get("home_winner")
-                        else f["away_team"]
-                        if f.get("away_winner")
-                        else None
-                    ),
-                }
-                for f in fixtures
-                if f["status"] == "FT" and f["home_score"] is not None
+                str(f["fixture_id"]): fixture_to_result_entry(f) for f in fixtures
             }
 
             output = run_live_simulation(

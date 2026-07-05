@@ -186,3 +186,156 @@ export interface AccuracyStats {
   brier_by_round: Record<string, number>;
   correct_by_round: Record<string, number>;
 }
+
+// ── Story page types ──────────────────────────────────────────────────────────
+
+export interface StageMeta {
+  stage: string;
+  display: string;
+  display_short: string;
+  display_long: string;
+  saved_at: string;
+  teams_alive: number;
+  matches_completed: number;
+  reconstructed: boolean;
+  model_version: string;
+}
+
+export interface TeamStagePoint {
+  stage: string;
+  p_champion: number;
+  p_final: number;
+  p_semi: number;
+  eliminated: boolean;
+  eliminated_in?: string | null;
+}
+
+export interface StoryEvolution {
+  stages: StageMeta[];
+  teams: Record<string, TeamStagePoint[]>;
+}
+
+export interface MoverRecord {
+  wins: number;
+  draws: number;
+  losses: number;
+  gf: number;
+  ga: number;
+  matches: {
+    opponent: string;
+    score: string;
+    result: "W" | "D" | "L";
+    round: string;
+  }[];
+}
+
+export interface MoverCard {
+  team: string;
+  before: number;
+  after: number;
+  delta: number;
+  eliminated_in?: string | null;
+  record: MoverRecord;
+  elo_change: number | null;
+}
+
+export interface StoryMovers {
+  from_stage: string;
+  to_stage: string;
+  from_display: string;
+  from_display_short?: string;
+  from_display_long?: string;
+  to_display: string;
+  to_display_short?: string;
+  to_display_long?: string;
+  new_results_count: number;
+  risers: MoverCard[];
+  fallers: MoverCard[];
+}
+
+export interface Upset {
+  team_a: string;
+  team_b: string;
+  score: string;
+  round: string;
+  model_favoured: string;
+  confidence: number;
+  actual: string;
+}
+
+export interface StageAccuracy {
+  stage: string;
+  display: string;
+  display_short?: string;
+  display_long?: string;
+  predicts_round: string;
+  reconstructed?: boolean;
+  n_matches: number;
+  correct?: number;
+  correct_pct?: number | null;
+  brier?: number | null;
+  upsets?: Upset[];
+  status?: string;
+}
+
+export interface CalibrationBucket {
+  bucket: string;
+  midpoint: number;
+  n: number;
+  predicted_rate: number;
+  actual_rate: number;
+}
+
+export interface StoryAccuracy {
+  per_stage: StageAccuracy[];
+  calibration: CalibrationBucket[];
+  overall: {
+    n_matches: number;
+    correct_pct: number | null;
+    brier: number | null;
+    wc2022_benchmark_brier: number;
+  };
+}
+
+export interface FeatureAttribution {
+  feature: string;
+  display: string;
+  description: string;
+  value: number;
+  favours: "a" | "b" | "neutral";
+  normalised_magnitude?: number;
+}
+
+export interface MatchExplanation {
+  team_a: string;
+  team_b: string;
+  stage: string;
+  stage_display: string;
+  display?: string;
+  display_short?: string;
+  display_long?: string;
+  cut_date: string;
+  context: {
+    team_a_elo: number | null;
+    team_b_elo: number | null;
+    h2h_meetings: number | null;
+    round_importance: number | null;
+  };
+  summary: string;
+  features: FeatureAttribution[];
+  recorded_prediction: {
+    p_team_a_win: number;
+    p_draw: number;
+    p_team_b_win: number;
+    expected_score_a: number;
+    expected_score_b: number;
+  } | null;
+  actual_result: {
+    score_a: number;
+    score_b: number;
+    winner: string | null;
+    round: string;
+  } | null;
+  reconstructed: boolean;
+  notes: string;
+}
