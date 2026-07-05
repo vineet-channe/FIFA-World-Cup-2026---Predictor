@@ -12,6 +12,66 @@ from .penalties import simulate_penalties
 from .scoreline import get_lambdas, sample_scoreline
 
 # ---------------------------------------------------------------------------
+# Fixed knockout bracket (FIFA WC 2026 — matches 73–104)
+# ---------------------------------------------------------------------------
+# R32 slots are 0–15 in official match order (fixture_id ascending in live data).
+# Each R16 pairing lists the two R32 slot indices whose winners meet.
+
+R16_FROM_R32: list[tuple[int, int]] = [
+    (0, 1),    # M89: Paraguay vs France
+    (2, 3),    # M90: Canada vs Morocco
+    (8, 9),    # M91: Brazil vs Norway
+    (10, 11),  # M92: Mexico vs England
+    (4, 5),    # M93: Portugal vs Spain
+    (6, 7),    # M94: USA vs Belgium
+    (12, 13),  # M95: Argentina vs Egypt
+    (14, 15),  # M96: Switzerland vs Colombia
+]
+
+QF_FROM_R16: list[tuple[int, int]] = [
+    (0, 1),  # M97:  W89 vs W90
+    (2, 3),  # M99:  W91 vs W92
+    (4, 5),  # M98:  W93 vs W94
+    (6, 7),  # M100: W95 vs W96
+]
+
+SF_FROM_QF: list[tuple[int, int]] = [
+    (0, 1),  # M101: W97 vs W99  (left half)
+    (2, 3),  # M102: W98 vs W100 (right half)
+]
+
+
+def order_r32_matches(r32_matches: list[dict]) -> list[dict]:
+    """Return R32 fixtures in official bracket slot order (matches 73–88)."""
+    return sorted(r32_matches, key=lambda m: m["fixture_id"])
+
+
+def r32_winners_for_sim(
+    ordered_r32: list[dict],
+    completed_r32: dict[int, dict],
+    simulate_match,
+) -> list[str | None]:
+    """
+    Build a length-16 list of R32 winners aligned to bracket slots.
+    ``simulate_match(ta, tb)`` must return (winner, score_a, score_b).
+    """
+    winners: list[str | None] = [None] * 16
+    for slot, m in enumerate(ordered_r32):
+        fid = m["fixture_id"]
+        if m["status"] == "FT" and fid in completed_r32:
+            winners[slot] = completed_r32[fid]["winner"]
+        elif m["status"] == "FT" and m.get("winner"):
+            winners[slot] = m["winner"]
+        else:
+            ta, tb = m["team_a"], m["team_b"]
+            if ta in ("TBD", "") or tb in ("TBD", ""):
+                continue
+            winner, _, _ = simulate_match(ta, tb)
+            winners[slot] = winner
+    return winners
+
+
+# ---------------------------------------------------------------------------
 # R32 bracket template (FIFA WC 2026 announced pairing)
 # ---------------------------------------------------------------------------
 # Slot codes:  W_X = winner of group X,  RU_X = runner-up of group X

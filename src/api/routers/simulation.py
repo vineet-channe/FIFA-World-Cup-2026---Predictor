@@ -52,20 +52,21 @@ def _round_key(round_str: str) -> str:
         return "qf"
     if "semi" in r:
         return "sf"
-    if "final" in r:
-        return "final"
     if "3rd" in r or "third" in r:
         return "3rd"
+    if "final" in r:
+        return "final"
     return "other"
 
 
-ROUND_ORDER = ["groups", "r32", "r16", "qf", "sf", "final"]
+ROUND_ORDER = ["groups", "r32", "r16", "qf", "sf", "3rd", "final"]
 ROUND_LABELS = {
     "groups": "Group Stage",
     "r32": "Round of 32",
     "r16": "Round of 16",
     "qf": "Quarter-finals",
     "sf": "Semi-finals",
+    "3rd": "3rd Place",
     "final": "Final",
 }
 

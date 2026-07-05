@@ -3,6 +3,8 @@ Simulates only the REMAINING knockout matches from the current real tournament s
 Completed matches are treated as fixed facts — not re-simulated.
 """
 import json
+from collections import Counter
+
 import numpy as np
 import pandas as pd
 from loguru import logger
@@ -15,9 +17,86 @@ from src.models.dixon_coles import DixonColesModel
 from src.features.elo_features import get_elo_on_date
 from src.simulation.scoreline import sample_scoreline
 from src.simulation.penalties import simulate_penalties
+from src.simulation.knockout import (
+    QF_FROM_R16,
+    R16_FROM_R32,
+    SF_FROM_QF,
+    order_r32_matches,
+)
 
 SIM_PATH = settings.DATA_DIR / "predictions" / "tournament_simulation.json"
 WC2026_TEAMS = WC2026_CANONICAL_TEAMS
+
+
+def _empty_slot_acc() -> dict:
+    """One accumulator per bracket slot across all simulation runs."""
+    return {
+        "teams_a": Counter(),
+        "teams_b": Counter(),
+        "wins_a": 0,
+        "wins_b": 0,
+        "draws": 0,
+        "sum_a": 0.0,
+        "sum_b": 0.0,
+        "n": 0,
+    }
+
+
+def _record_slot(
+    acc: dict,
+    team_a: str,
+    team_b: str,
+    score_a: int,
+    score_b: int,
+    winner: str,
+) -> None:
+    """Record one simulated match result into a bracket slot accumulator."""
+    acc["teams_a"][team_a] += 1
+    acc["teams_b"][team_b] += 1
+    if winner == team_a:
+        acc["wins_a"] += 1
+    elif winner == team_b:
+        acc["wins_b"] += 1
+    else:
+        acc["draws"] += 1
+    acc["sum_a"] += score_a
+    acc["sum_b"] += score_b
+    acc["n"] += 1
+
+
+def _acc_to_prediction(
+    acc: dict,
+    round_name: str,
+    min_certainty: float = 0.40,
+) -> dict | None:
+    """Convert a bracket slot accumulator into a match_predictions entry."""
+    if acc["n"] == 0:
+        return None
+
+    team_a, count_a = acc["teams_a"].most_common(1)[0] if acc["teams_a"] else ("TBD", 0)
+    team_b, count_b = acc["teams_b"].most_common(1)[0] if acc["teams_b"] else ("TBD", 0)
+
+    cert_a = count_a / acc["n"]
+    cert_b = count_b / acc["n"]
+
+    total = acc["wins_a"] + acc["wins_b"] + acc["draws"]
+    p_a = acc["wins_a"] / total if total else 0.33
+    p_b = acc["wins_b"] / total if total else 0.34
+    p_d = acc["draws"] / total if total else 0.33
+
+    return {
+        "team_a": team_a if cert_a >= min_certainty else f"~{team_a}",
+        "team_b": team_b if cert_b >= min_certainty else f"~{team_b}",
+        "round": round_name,
+        "status": "predicted",
+        "p_team_a_win": round(p_a, 3),
+        "p_draw": round(p_d, 3),
+        "p_team_b_win": round(p_b, 3),
+        "expected_score_a": round(acc["sum_a"] / acc["n"], 2),
+        "expected_score_b": round(acc["sum_b"] / acc["n"], 2),
+        "team_a_certainty": round(cert_a, 3),
+        "team_b_certainty": round(cert_b, 3),
+    }
 
 
 def build_tournament_state(
@@ -218,8 +297,9 @@ def run_live_simulation(
     Completed matches are fixed facts; only future matches are simulated.
     """
     r32 = state["r32_matches"]
-    completed_r32 = {m["fixture_id"]: m for m in r32 if m["status"] == "FT"}
-    pending_r32 = [m for m in r32 if m["status"] != "FT"]
+    ordered_r32 = order_r32_matches(r32)
+    completed_r32 = {m["fixture_id"]: m for m in ordered_r32 if m["status"] == "FT"}
+    pending_r32 = [m for m in ordered_r32 if m["status"] != "FT"]
 
     remaining_teams = list(
         {
@@ -248,6 +328,12 @@ def run_live_simulation(
         for team in WC2026_TEAMS
     }
 
+    r16_acc = {i: _empty_slot_acc() for i in range(8)}
+    qf_acc = {i: _empty_slot_acc() for i in range(4)}
+    sf_acc = {i: _empty_slot_acc() for i in range(2)}
+    tpp_acc = _empty_slot_acc()
+    fin_acc = _empty_slot_acc()
+
     pending_acc: dict[int, dict] = {
         m["fixture_id"]: {
             "sum_a": 0,
@@ -266,10 +352,35 @@ def run_live_simulation(
     )
 
     for _ in tqdm(range(n_sim), desc="Simulating"):
-        r16_teams = []
+        pending_sim_results: dict[int, tuple[str, int, int]] = {}
+
+        def _sim(ta: str, tb: str) -> tuple[str, int, int]:
+            winner, sa, sb, _ = _simulate_knockout_match(
+                ta, tb, prob_cache, dc_cache, elo_cache
+            )
+            return winner, sa, sb
+
+        r32_winners: list[str | None] = [None] * 16
+
+        for m in pending_r32:
+            ta, tb = m["team_a"], m["team_b"]
+            if ta == "TBD" or tb == "TBD":
+                continue
+            winner, sa, sb = _sim(ta, tb)
+            pending_sim_results[m["fixture_id"]] = (winner, sa, sb)
+            acc = pending_acc[m["fixture_id"]]
+            acc["sum_a"] += sa
+            acc["sum_b"] += sb
+            acc["n"] += 1
+
+        for slot, m in enumerate(ordered_r32):
+            fid = m["fixture_id"]
+            if m["status"] == "FT":
+                r32_winners[slot] = completed_r32[fid]["winner"]
+            elif fid in pending_sim_results:
+                r32_winners[slot] = pending_sim_results[fid][0]
 
         for m in completed_r32.values():
-            r16_teams.append(m["winner"])
             for t, gf, ga in [
                 (m["team_a"], m["score_a"], m["score_b"]),
                 (m["team_b"], m["score_b"], m["score_a"]),
@@ -280,68 +391,128 @@ def run_live_simulation(
                     counts[t]["matches_played"] += 1
 
         for m in pending_r32:
-            ta, tb = m["team_a"], m["team_b"]
-            if ta == "TBD" or tb == "TBD":
+            fid = m["fixture_id"]
+            if fid not in pending_sim_results:
                 continue
-            winner, sa, sb, _ = _simulate_knockout_match(
-                ta, tb, prob_cache, dc_cache, elo_cache
-            )
-            r16_teams.append(winner)
-            pending_acc[m["fixture_id"]]["sum_a"] += sa
-            pending_acc[m["fixture_id"]]["sum_b"] += sb
-            pending_acc[m["fixture_id"]]["n"] += 1
+            sa, sb = pending_sim_results[fid][1], pending_sim_results[fid][2]
+            ta, tb = m["team_a"], m["team_b"]
             for t, gf, ga in [(ta, sa, sb), (tb, sb, sa)]:
                 if t in counts:
                     counts[t]["goals_for"] += gf
                     counts[t]["goals_against"] += ga
                     counts[t]["matches_played"] += 1
 
-        def sim_round(teams: list[str]) -> list[str]:
-            winners = []
-            n = len(teams) - (len(teams) % 2)
-            for i in range(0, n, 2):
-                ta, tb = teams[i], teams[i + 1]
-                if ta not in elo_cache or tb not in elo_cache:
-                    winners.append(ta)
-                    continue
-                w, sa, sb, _ = _simulate_knockout_match(
-                    ta, tb, prob_cache, dc_cache, elo_cache
+        r16_participants: list[str] = []
+
+        # ── R16 (fixed FIFA bracket) ──────────────────────────────────────────
+        r16_winners: list[str | None] = []
+        sf_losers: list[str] = []
+
+        for slot, (idx_a, idx_b) in enumerate(R16_FROM_R32):
+            ta, tb = r32_winners[idx_a], r32_winners[idx_b]
+            if not ta or not tb:
+                r16_winners.append(None)
+                continue
+            r16_participants.extend([ta, tb])
+            if ta not in elo_cache or tb not in elo_cache:
+                r16_winners.append(ta)
+                continue
+            winner, sa, sb, _ = _simulate_knockout_match(
+                ta, tb, prob_cache, dc_cache, elo_cache
+            )
+            _record_slot(r16_acc[slot], ta, tb, sa, sb, winner)
+            r16_winners.append(winner)
+            for t, gf, ga in [(ta, sa, sb), (tb, sb, sa)]:
+                if t in counts:
+                    counts[t]["goals_for"] += gf
+                    counts[t]["goals_against"] += ga
+                    counts[t]["matches_played"] += 1
+
+        # ── QF ────────────────────────────────────────────────────────────────
+        qf_winners: list[str | None] = []
+
+        for slot, (idx_a, idx_b) in enumerate(QF_FROM_R16):
+            ta, tb = r16_winners[idx_a], r16_winners[idx_b]
+            if not ta or not tb:
+                qf_winners.append(None)
+                continue
+            if ta not in elo_cache or tb not in elo_cache:
+                qf_winners.append(ta)
+                continue
+            winner, sa, sb, _ = _simulate_knockout_match(
+                ta, tb, prob_cache, dc_cache, elo_cache
+            )
+            _record_slot(qf_acc[slot], ta, tb, sa, sb, winner)
+            qf_winners.append(winner)
+            for t, gf, ga in [(ta, sa, sb), (tb, sb, sa)]:
+                if t in counts:
+                    counts[t]["goals_for"] += gf
+                    counts[t]["goals_against"] += ga
+                    counts[t]["matches_played"] += 1
+
+        # ── SF ────────────────────────────────────────────────────────────────
+        sf_winners: list[str | None] = []
+
+        for slot, (idx_a, idx_b) in enumerate(SF_FROM_QF):
+            ta, tb = qf_winners[idx_a], qf_winners[idx_b]
+            if not ta or not tb:
+                sf_winners.append(None)
+                continue
+            if ta not in elo_cache or tb not in elo_cache:
+                sf_winners.append(ta)
+                continue
+            winner, sa, sb, _ = _simulate_knockout_match(
+                ta, tb, prob_cache, dc_cache, elo_cache
+            )
+            loser = tb if winner == ta else ta
+            _record_slot(sf_acc[slot], ta, tb, sa, sb, winner)
+            sf_winners.append(winner)
+            sf_losers.append(loser)
+            for team in (ta, tb):
+                if team in counts:
+                    counts[team]["semi"] += 1
+            for t, gf, ga in [(ta, sa, sb), (tb, sb, sa)]:
+                if t in counts:
+                    counts[t]["goals_for"] += gf
+                    counts[t]["goals_against"] += ga
+                    counts[t]["matches_played"] += 1
+
+        # ── 3rd place ─────────────────────────────────────────────────────────
+        if len(sf_losers) >= 2:
+            ta_3, tb_3 = sf_losers[0], sf_losers[1]
+            if ta_3 in elo_cache and tb_3 in elo_cache:
+                winner_3, sa_3, sb_3, _ = _simulate_knockout_match(
+                    ta_3, tb_3, prob_cache, dc_cache, elo_cache
                 )
-                winners.append(w)
-                for t, gf, ga in [(ta, sa, sb), (tb, sb, sa)]:
+                _record_slot(tpp_acc, ta_3, tb_3, sa_3, sb_3, winner_3)
+
+        # ── Final ─────────────────────────────────────────────────────────────
+        if len(sf_winners) >= 2:
+            ta_f, tb_f = sf_winners[0], sf_winners[1]
+            if ta_f and tb_f and ta_f in elo_cache and tb_f in elo_cache:
+                winner_f, sa_f, sb_f, _ = _simulate_knockout_match(
+                    ta_f, tb_f, prob_cache, dc_cache, elo_cache
+                )
+                _record_slot(fin_acc, ta_f, tb_f, sa_f, sb_f, winner_f)
+                if winner_f in counts:
+                    counts[winner_f]["champion"] += 1
+                for team in (ta_f, tb_f):
+                    if team in counts:
+                        counts[team]["final"] += 1
+                for t, gf, ga in [(ta_f, sa_f, sb_f), (tb_f, sb_f, sa_f)]:
                     if t in counts:
                         counts[t]["goals_for"] += gf
                         counts[t]["goals_against"] += ga
                         counts[t]["matches_played"] += 1
-            return winners
+            elif sf_winners[0] and sf_winners[0] in counts:
+                counts[sf_winners[0]]["champion"] += 1
 
-        qf_teams = sim_round(r16_teams)
-        sf_teams = sim_round(qf_teams)
-        final_teams = sim_round(sf_teams)
-
-        for t in r16_teams:
+        for t in r16_participants:
             if t in counts:
                 counts[t]["r16"] += 1
-        for t in qf_teams:
-            if t in counts:
+        for t in qf_winners:
+            if t and t in counts:
                 counts[t]["quarter"] += 1
-        for t in sf_teams:
-            if t in counts:
-                counts[t]["semi"] += 1
-        for t in final_teams:
-            if t in counts:
-                counts[t]["final"] += 1
-
-        if len(final_teams) >= 2:
-            winner, sa, sb, _ = _simulate_knockout_match(
-                final_teams[0], final_teams[1], prob_cache, dc_cache, elo_cache
-            )
-        elif len(final_teams) == 1:
-            winner = final_teams[0]
-        else:
-            winner = None
-        if winner and winner in counts:
-            counts[winner]["champion"] += 1
 
     team_probs: dict[str, dict] = {}
     for team in WC2026_TEAMS:
@@ -406,6 +577,43 @@ def run_live_simulation(
             "expected_score_a": round(acc["sum_a"] / n, 2) if n else 1.3,
             "expected_score_b": round(acc["sum_b"] / n, 2) if n else 1.1,
         }
+
+    downstream: dict[str, dict] = {}
+
+    for i, acc in r16_acc.items():
+        pred = _acc_to_prediction(acc, "Round of 16")
+        if pred:
+            downstream[f"r16_{i + 1}"] = pred
+
+    for i, acc in qf_acc.items():
+        pred = _acc_to_prediction(acc, "Quarter-finals")
+        if pred:
+            downstream[f"qf_{i + 1}"] = pred
+
+    for i, acc in sf_acc.items():
+        pred = _acc_to_prediction(acc, "Semi-finals")
+        if pred:
+            downstream[f"sf_{i + 1}"] = pred
+
+    pred_3rd = _acc_to_prediction(tpp_acc, "3rd Place")
+    if pred_3rd:
+        downstream["3rd_place"] = pred_3rd
+
+    pred_fin = _acc_to_prediction(fin_acc, "Final")
+    if pred_fin:
+        downstream["final_match"] = pred_fin
+
+    match_preds.update(downstream)
+
+    logger.info(
+        f"match_predictions: "
+        f"{sum(1 for v in match_preds.values() if 'Group Stage' in v.get('round', ''))} group | "
+        f"{sum(1 for v in match_preds.values() if v.get('round') == 'Round of 32')} r32 | "
+        f"{sum(1 for v in match_preds.values() if v.get('round') == 'Round of 16')} r16 | "
+        f"{sum(1 for v in match_preds.values() if v.get('round') == 'Quarter-finals')} qf | "
+        f"{sum(1 for v in match_preds.values() if v.get('round') == 'Semi-finals')} sf | "
+        f"{sum(1 for v in match_preds.values() if v.get('round') in ('3rd Place', 'Final'))} 3rd/final"
+    )
 
     output = {
         "metadata": {

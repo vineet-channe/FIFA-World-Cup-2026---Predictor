@@ -7,6 +7,51 @@ import { FlipNumber } from "@/components/ui/flip-number";
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
+/** Strips the ~ prefix and returns whether this team name is a projection. */
+function parseTeamName(raw: string): { name: string; isProjection: boolean } {
+  if (raw.startsWith("~")) {
+    return { name: raw.slice(1), isProjection: true };
+  }
+  return { name: raw, isProjection: false };
+}
+
+function TeamName({
+  raw,
+  color = "var(--chalk)",
+}: {
+  raw: string;
+  color?: string;
+}) {
+  const { name, isProjection } = parseTeamName(raw);
+  return (
+    <span
+      style={{
+        fontSize: 13,
+        fontWeight: 500,
+        color: isProjection ? "rgba(245,243,236,0.45)" : color,
+        fontFamily: "var(--font-body)",
+      }}
+    >
+      {!isProjection && getFlagClass(name) && (
+        <i className={getFlagClass(name)} style={{ marginRight: 5 }} />
+      )}
+      {name}
+      {isProjection && (
+        <span
+          style={{
+            marginLeft: 5,
+            fontSize: 9,
+            fontFamily: "var(--font-mono)",
+            color: "rgba(245,243,236,0.3)",
+          }}
+        >
+          projected
+        </span>
+      )}
+    </span>
+  );
+}
+
 function labelledDate(dateStr: string | null | undefined): string {
   if (!dateStr) return "";
   try {
@@ -21,6 +66,8 @@ function labelledDate(dateStr: string | null | undefined): string {
 
 function predictedOutcomeText(match: MatchResultCard): string {
   const { p_team_a_win, p_draw, p_team_b_win, team_a, team_b } = match;
+  const ta = parseTeamName(team_a).name;
+  const tb = parseTeamName(team_b).name;
   if (
     p_team_a_win == null ||
     p_draw == null ||
@@ -29,10 +76,10 @@ function predictedOutcomeText(match: MatchResultCard): string {
     return "Unknown";
   }
   if (p_team_a_win >= p_draw && p_team_a_win >= p_team_b_win) {
-    return `${team_a} win`;
+    return `${ta} win`;
   }
   if (p_team_b_win >= p_draw && p_team_b_win >= p_team_a_win) {
-    return `${team_b} win`;
+    return `${tb} win`;
   }
   return "Draw";
 }
@@ -157,6 +204,8 @@ function ProbabilityBar({
 function MatchCard({ match }: { match: MatchResultCard }) {
   const completed = match.status === "completed";
   const { team_a, team_b } = match;
+  const teamA = parseTeamName(team_a);
+  const teamB = parseTeamName(team_b);
 
   if (completed) {
     const resultLabel =
@@ -233,25 +282,22 @@ function MatchCard({ match }: { match: MatchResultCard }) {
                 width: 3,
                 height: 18,
                 borderRadius: 2,
-                background: getKitColor(team_a),
+                background: getKitColor(teamA.name),
                 display: "inline-block",
                 flexShrink: 0,
               }}
             />
-            {getFlagClass(team_a) && <i className={getFlagClass(team_a)} />}
-            <span
-              style={{
-                fontSize: 13,
-                fontWeight: 500,
-                color:
-                  actualWinner === team_a
-                    ? "var(--chalk)"
-                    : "rgba(245,243,236,0.5)",
-                fontFamily: "var(--font-body)",
-              }}
-            >
-              {team_a}
-            </span>
+            {!teamA.isProjection && getFlagClass(teamA.name) && (
+              <i className={getFlagClass(teamA.name)} />
+            )}
+            <TeamName
+              raw={team_a}
+              color={
+                actualWinner === teamA.name
+                  ? "var(--chalk)"
+                  : "rgba(245,243,236,0.5)"
+              }
+            />
           </div>
 
           <div
@@ -277,26 +323,23 @@ function MatchCard({ match }: { match: MatchResultCard }) {
               justifyContent: "flex-end",
             }}
           >
-            <span
-              style={{
-                fontSize: 13,
-                fontWeight: 500,
-                color:
-                  actualWinner === team_b
-                    ? "var(--chalk)"
-                    : "rgba(245,243,236,0.5)",
-                fontFamily: "var(--font-body)",
-              }}
-            >
-              {team_b}
-            </span>
-            {getFlagClass(team_b) && <i className={getFlagClass(team_b)} />}
+            <TeamName
+              raw={team_b}
+              color={
+                actualWinner === teamB.name
+                  ? "var(--chalk)"
+                  : "rgba(245,243,236,0.5)"
+              }
+            />
+            {!teamB.isProjection && getFlagClass(teamB.name) && (
+              <i className={getFlagClass(teamB.name)} />
+            )}
             <span
               style={{
                 width: 3,
                 height: 18,
                 borderRadius: 2,
-                background: getKitColor(team_b),
+                background: getKitColor(teamB.name),
                 display: "inline-block",
                 flexShrink: 0,
               }}
@@ -445,22 +488,12 @@ function MatchCard({ match }: { match: MatchResultCard }) {
               width: 3,
               height: 18,
               borderRadius: 2,
-              background: getKitColor(team_a),
+              background: getKitColor(teamA.name),
               display: "inline-block",
               flexShrink: 0,
             }}
           />
-          {getFlagClass(team_a) && <i className={getFlagClass(team_a)} />}
-          <span
-            style={{
-              fontSize: 13,
-              fontWeight: 500,
-              color: "var(--chalk)",
-              fontFamily: "var(--font-body)",
-            }}
-          >
-            {team_a}
-          </span>
+          <TeamName raw={team_a} />
         </div>
 
         <span
@@ -484,23 +517,13 @@ function MatchCard({ match }: { match: MatchResultCard }) {
             justifyContent: "flex-end",
           }}
         >
-          <span
-            style={{
-              fontSize: 13,
-              fontWeight: 500,
-              color: "var(--chalk)",
-              fontFamily: "var(--font-body)",
-            }}
-          >
-            {team_b}
-          </span>
-          {getFlagClass(team_b) && <i className={getFlagClass(team_b)} />}
+          <TeamName raw={team_b} />
           <span
             style={{
               width: 3,
               height: 18,
               borderRadius: 2,
-              background: getKitColor(team_b),
+              background: getKitColor(teamB.name),
               display: "inline-block",
               flexShrink: 0,
             }}
@@ -532,9 +555,9 @@ function MatchCard({ match }: { match: MatchResultCard }) {
       </div>
 
       <ProbabilityBar
-        pa={match.p_team_a_win}
-        pd={match.p_draw}
-        pb={match.p_team_b_win}
+        pa={match.p_team_a_win ?? 0}
+        pd={match.p_draw ?? 0}
+        pb={match.p_team_b_win ?? 0}
       />
 
       <div
@@ -566,8 +589,8 @@ function MatchCard({ match }: { match: MatchResultCard }) {
             letterSpacing: "0.05em",
           }}
         >
-          {Math.round(match.expected_score_a)} —{" "}
-          {Math.round(match.expected_score_b)}
+          {Math.round(match.expected_score_a ?? 0)} —{" "}
+          {Math.round(match.expected_score_b ?? 0)}
         </span>
         <span
           style={{
@@ -576,8 +599,8 @@ function MatchCard({ match }: { match: MatchResultCard }) {
             color: "rgba(245,243,236,0.2)",
           }}
         >
-          ({match.expected_score_a.toFixed(1)} —{" "}
-          {match.expected_score_b.toFixed(1)} avg)
+          ({(match.expected_score_a ?? 0).toFixed(1)} —{" "}
+          {(match.expected_score_b ?? 0).toFixed(1)} avg)
         </span>
       </div>
     </div>
