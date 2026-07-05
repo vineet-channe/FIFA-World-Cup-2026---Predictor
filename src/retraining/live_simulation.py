@@ -28,6 +28,48 @@ SIM_PATH = settings.DATA_DIR / "predictions" / "tournament_simulation.json"
 WC2026_TEAMS = WC2026_CANONICAL_TEAMS
 
 
+def _strip_projection(name: str) -> str:
+    """Remove ~ prefix from projected team names in bracket accumulators."""
+    return name[1:] if name.startswith("~") else name
+
+
+def _match_pair_key(team_a: str, team_b: str) -> tuple[str, str]:
+    """Order-independent key for deduplicating the same fixture."""
+    return tuple(sorted([_strip_projection(team_a), _strip_projection(team_b)]))
+
+
+def _build_completed_knockout(
+    actual_results: dict | None,
+    round_label: str,
+) -> dict[tuple[str, str], dict]:
+    """Index completed knockout matches by team pair."""
+    out: dict[tuple[str, str], dict] = {}
+    if not actual_results:
+        return out
+    for res in actual_results.values():
+        if res.get("round") != round_label or not res.get("played"):
+            continue
+        key = _match_pair_key(res["team_a"], res["team_b"])
+        out[key] = res
+    return out
+
+
+def _orient_completed_match(
+    ta: str,
+    tb: str,
+    res: dict,
+) -> tuple[str, int, int]:
+    """Map stored scores to the bracket orientation (ta, tb)."""
+    winner = res.get("winner")
+    sa = int(res.get("score_a") or 0)
+    sb = int(res.get("score_b") or 0)
+    if res["team_a"] == ta and res["team_b"] == tb:
+        return winner, sa, sb
+    if res["team_a"] == tb and res["team_b"] == ta:
+        return winner, sb, sa
+    return winner, sa, sb
+
+
 def _empty_slot_acc() -> dict:
     """One accumulator per bracket slot across all simulation runs."""
     return {
@@ -160,24 +202,68 @@ def _precompute_caches(
     ensemble,
     dc_model: DixonColesModel,
     elo_df: pd.DataFrame,
-    cut_date: str = "2026-07-04",
+    cut_date: str = "2026-06-11",
+    lgbm_model=None,
+    lgbm_blend_weight: float = 0.0,
 ) -> tuple[dict, dict, dict]:
-    """Pre-compute ensemble probabilities + DC lambdas for all remaining team pairs."""
+    """Pre-compute blended probabilities + DC lambdas for all remaining team pairs.
+
+    When lgbm_model is provided and lgbm_blend_weight > 0, blends the retrained
+    LightGBM (which knows about actual WC 2026 results) with the frozen stacking
+    ensemble (which has broader historical calibration).
+    """
     from src.api.predict_service import build_feature_vectors, calibrate_lambdas
+    from src.features.pipeline import FEATURE_COLS_TREES
 
     prob_cache: dict[tuple, np.ndarray] = {}
-    dc_cache: dict[tuple, tuple] = {}
-    elo_cache: dict[str, float] = {}
+    dc_cache:   dict[tuple, tuple]      = {}
+    elo_cache:  dict[str, float]        = {}
 
     cut = pd.Timestamp(cut_date)
     for team in remaining_teams:
         elo_cache[team] = get_elo_on_date(elo_df, team, cut)
 
-    logger.info(f"Pre-computing caches for {len(remaining_teams)} teams...")
+    use_blend = lgbm_model is not None and lgbm_blend_weight > 0.0
+    if use_blend:
+        logger.info(
+            f"Pre-computing blended caches for {len(remaining_teams)} teams — "
+            f"LightGBM {lgbm_blend_weight:.0%} / Ensemble {1 - lgbm_blend_weight:.0%}"
+        )
+    else:
+        logger.info(
+            f"Pre-computing caches for {len(remaining_teams)} teams "
+            f"(ensemble only — no WC 2026 data yet)..."
+        )
+
     for i, ta in enumerate(remaining_teams):
         for tb in remaining_teams[i + 1 :]:
             X_trees, X_linear = build_feature_vectors(ta, tb, cut_date=cut_date)
-            proba = predict_ensemble(ensemble, X_trees, X_linear)[0]
+
+            # Ensemble prediction
+            ens_proba = predict_ensemble(ensemble, X_trees, X_linear)[0]
+
+            # Blend with LightGBM if available
+            if use_blend:
+                try:
+                    X_lgbm = pd.DataFrame(
+                        [X_trees[0]], columns=FEATURE_COLS_TREES
+                    )
+                    X_lgbm = X_lgbm.fillna(X_lgbm.median())
+                    lgbm_proba = lgbm_model.predict_proba(X_lgbm)[0]
+                    blended = (
+                        lgbm_blend_weight * lgbm_proba
+                        + (1 - lgbm_blend_weight) * ens_proba
+                    )
+                    blended = blended / blended.sum()
+                    proba = blended
+                except Exception as _exc:
+                    logger.warning(
+                        f"LightGBM blend failed for {ta} vs {tb}: {_exc} — "
+                        f"falling back to ensemble"
+                    )
+                    proba = ens_proba
+            else:
+                proba = ens_proba
 
             dc = dc_model.predict(ta, tb, neutral=True)
             lam_a = dc["lambda_a"]
@@ -188,8 +274,8 @@ def _precompute_caches(
 
             prob_cache[(ta, tb)] = proba
             prob_cache[(tb, ta)] = np.array([proba[2], proba[1], proba[0]])
-            dc_cache[(ta, tb)] = (lam_a, lam_b)
-            dc_cache[(tb, ta)] = (lam_b, lam_a)
+            dc_cache[(ta, tb)]   = (lam_a, lam_b)
+            dc_cache[(tb, ta)]   = (lam_b, lam_a)
 
     return prob_cache, dc_cache, elo_cache
 
@@ -291,6 +377,8 @@ def run_live_simulation(
     elo_df: pd.DataFrame,
     n_sim: int = 10_000,
     actual_results: dict | None = None,
+    lgbm_model=None,
+    lgbm_blend_weight: float = 0.0,
 ) -> dict:
     """
     Simulate the remaining tournament from the current real state.
@@ -300,6 +388,7 @@ def run_live_simulation(
     ordered_r32 = order_r32_matches(r32)
     completed_r32 = {m["fixture_id"]: m for m in ordered_r32 if m["status"] == "FT"}
     pending_r32 = [m for m in ordered_r32 if m["status"] != "FT"]
+    completed_r16 = _build_completed_knockout(actual_results, "Round of 16")
 
     remaining_teams = list(
         {
@@ -311,7 +400,12 @@ def run_live_simulation(
     )
 
     prob_cache, dc_cache, elo_cache = _precompute_caches(
-        remaining_teams, ensemble, dc_model, elo_df
+        remaining_teams,
+        ensemble,
+        dc_model,
+        elo_df,
+        lgbm_model=lgbm_model,
+        lgbm_blend_weight=lgbm_blend_weight,
     )
 
     counts = {
@@ -414,6 +508,19 @@ def run_live_simulation(
                 r16_winners.append(None)
                 continue
             r16_participants.extend([ta, tb])
+            pair_key = _match_pair_key(ta, tb)
+            if pair_key in completed_r16:
+                winner, sa, sb = _orient_completed_match(
+                    ta, tb, completed_r16[pair_key]
+                )
+                _record_slot(r16_acc[slot], ta, tb, sa, sb, winner)
+                r16_winners.append(winner)
+                for t, gf, ga in [(ta, sa, sb), (tb, sb, sa)]:
+                    if t in counts:
+                        counts[t]["goals_for"] += gf
+                        counts[t]["goals_against"] += ga
+                        counts[t]["matches_played"] += 1
+                continue
             if ta not in elo_cache or tb not in elo_cache:
                 r16_winners.append(ta)
                 continue
@@ -548,7 +655,13 @@ def run_live_simulation(
 
     if actual_results:
         for mid, res in actual_results.items():
-            entry = {**res, "status": "completed"}
+            entry = {
+                **res,
+                "status": "completed",
+                "actual_score_a": res.get("score_a"),
+                "actual_score_b": res.get("score_b"),
+                "actual_winner": res.get("winner"),
+            }
             entry = _attach_forecast(
                 entry,
                 res["team_a"],
@@ -603,6 +716,17 @@ def run_live_simulation(
     if pred_fin:
         downstream["final_match"] = pred_fin
 
+    completed_pairs = {
+        _match_pair_key(m["team_a"], m["team_b"])
+        for m in match_preds.values()
+        if m.get("status") == "completed"
+    }
+    downstream = {
+        mid: pred
+        for mid, pred in downstream.items()
+        if _match_pair_key(pred["team_a"], pred["team_b"]) not in completed_pairs
+    }
+
     match_preds.update(downstream)
 
     logger.info(
@@ -621,7 +745,12 @@ def run_live_simulation(
             "random_seed": 42,
             "run_at": pd.Timestamp.now().isoformat(),
             "data_as_of": pd.Timestamp.now().isoformat(),
-            "model": "ensemble_v1 + lgbm_live + dixon_coles_v1",
+            "model": (
+                f"lgbm_{lgbm_blend_weight:.0%}+ensemble_{1-lgbm_blend_weight:.0%}"
+                f"+dixon_coles_v1"
+                if lgbm_blend_weight > 0
+                else "ensemble_v1+dixon_coles_v1"
+            ),
             "tournament_phase": state.get("current_round", "Round of 32"),
         },
         "actual_results": actual_results or {},

@@ -107,6 +107,22 @@ class LiveRetrainPipeline:
             else:
                 logger.warning(f"Using previous model: {self.current_lgbm_path}")
 
+            # Count WC 2026 matches in training data to compute blend weight
+            wc2026_mask = (
+                fm_extended["tournament"].str.contains("FIFA World Cup", na=False)
+                & (fm_extended["match_date"].dt.year == 2026)
+            )
+            n_wc2026_matches = int(wc2026_mask.sum())
+            lgbm_blend_weight = min(n_wc2026_matches / 100, 0.75)
+
+            logger.info(
+                f"WC 2026 matches in training: {n_wc2026_matches} | "
+                f"Blend: LightGBM {lgbm_blend_weight:.0%} / "
+                f"Ensemble {1 - lgbm_blend_weight:.0%}"
+            )
+            mlflow.log_metric("n_wc2026_matches", n_wc2026_matches)
+            mlflow.log_metric("lgbm_blend_weight", lgbm_blend_weight)
+
             state = build_tournament_state(fixtures, standings, bracket)
 
             actual_results = {
@@ -136,6 +152,8 @@ class LiveRetrainPipeline:
                 elo_df,
                 n_sim=n_sim,
                 actual_results=actual_results,
+                lgbm_model=self.current_lgbm,
+                lgbm_blend_weight=lgbm_blend_weight,
             )
             mlflow.log_metric(
                 "teams_remaining",
@@ -156,6 +174,20 @@ class LiveRetrainPipeline:
             if milestone:
                 save_snapshot(stage=milestone, simulation=output, model_version=model_ver)
                 mlflow.log_param("milestone_snapshot", milestone)
+
+            # Reload API models so /api/predict uses the updated LightGBM blend
+            try:
+                import requests as _requests
+                api_port = getattr(settings, "API_PORT", 8000)
+                _requests.post(
+                    f"http://localhost:{api_port}/api/reload-models",
+                    timeout=5,
+                )
+                logger.info("API models reloaded — predictor will use updated blend")
+            except Exception as _e:
+                logger.warning(
+                    f"Could not auto-reload API models: {_e} — restart 'make api' to apply blend"
+                )
 
             elapsed = time.time() - t0
             logger.info(f"=== Pipeline complete in {elapsed:.1f}s ===")

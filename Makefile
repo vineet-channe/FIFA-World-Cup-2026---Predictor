@@ -1,4 +1,4 @@
-.PHONY: api web install install-web catchup pipeline scheduler
+.PHONY: api web install install-web catchup pipeline scheduler rebuild-groups rebuild-groups-dry verify-snapshots
 
 api:
 	source worldcup/bin/activate && uvicorn src.api.main:app --reload --port 8000
@@ -20,3 +20,15 @@ pipeline:
 
 scheduler:
 	source worldcup/bin/activate && python scripts/07_start_scheduler.py
+
+rebuild-groups:
+	source worldcup/bin/activate && \
+	python scripts/rebuild_post_group_stage.py
+
+rebuild-groups-dry:
+	source worldcup/bin/activate && \
+	python scripts/rebuild_post_group_stage.py --dry-run
+
+verify-snapshots:
+	source worldcup/bin/activate && \
+	python scripts/verify_snapshots.py

@@ -369,21 +369,35 @@ def predict_matchup(team_a: str, team_b: str, ensemble: object = None) -> Predic
     """
     from src.models.ensemble import predict_ensemble
 
-    # ensemble is injected via the router, but lru_cache needs hashable args.
-    # We import the global reference loaded at startup instead.
     from src.api.main import app as _app
     _ensemble = getattr(_app.state, "ensemble", None)
     _dc_model = getattr(_app.state, "dc_model", None)
+    _lgbm     = getattr(_app.state, "lgbm", None)
+    _blend_w  = float(getattr(_app.state, "lgbm_blend_weight", 0.0))
+
     if _ensemble is None:
         raise RuntimeError("Ensemble model not loaded — check startup logs.")
     if _dc_model is None:
         raise RuntimeError("Dixon-Coles model not loaded — check startup logs.")
 
     X_trees, X_linear = build_feature_vectors(team_a, team_b)
-    proba = predict_ensemble(_ensemble, X_trees, X_linear)
 
-    # shape (3,) — [P(team_b_wins), P(draw), P(team_a_wins)]
-    outcome_proba = proba[0]
+    # Ensemble prediction (shape (3,): [P(b_wins), P(draw), P(a_wins)])
+    ens_proba = predict_ensemble(_ensemble, X_trees, X_linear)[0]
+
+    # Blend with LightGBM when WC 2026 data is available
+    if _lgbm is not None and _blend_w > 0.0:
+        try:
+            X_lgbm = pd.DataFrame([X_trees[0]], columns=FEATURE_COLS_TREES)
+            X_lgbm = X_lgbm.fillna(X_lgbm.median())
+            lgbm_proba = _lgbm.predict_proba(X_lgbm)[0]
+            blended = _blend_w * lgbm_proba + (1 - _blend_w) * ens_proba
+            outcome_proba = blended / blended.sum()
+        except Exception as _exc:
+            logger.warning(f"LightGBM blend failed: {_exc} — using ensemble")
+            outcome_proba = ens_proba
+    else:
+        outcome_proba = ens_proba
     p_b_win = float(outcome_proba[0])
     p_draw  = float(outcome_proba[1])
     p_a_win = float(outcome_proba[2])

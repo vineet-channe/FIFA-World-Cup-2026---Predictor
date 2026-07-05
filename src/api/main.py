@@ -41,6 +41,41 @@ app.include_router(predict.router,    prefix="/api")
 app.include_router(model.router,      prefix="/api")
 
 
+def _find_latest_lgbm() -> Path | None:
+    """Return the most recently modified LightGBM model file, or None."""
+    model_dir = _ROOT / "models"
+    live_models = sorted(
+        model_dir.glob("lightgbm_live_*.pkl"),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+    if live_models:
+        return live_models[0]
+    base = model_dir / "lightgbm_v1.pkl"
+    return base if base.exists() else None
+
+
+def _compute_blend_weight() -> tuple[int, float]:
+    """Count WC 2026 matches in the feature matrix and compute blend weight."""
+    try:
+        import pandas as pd
+        fm_path = _ROOT / "data" / "processed" / "feature_matrix.parquet"
+        if not fm_path.exists():
+            return 0, 0.0
+        fm = pd.read_parquet(fm_path, columns=["tournament", "match_date"])
+        fm["match_date"] = pd.to_datetime(fm["match_date"])
+        n = int(
+            (
+                fm["tournament"].str.contains("FIFA World Cup", na=False)
+                & (fm["match_date"].dt.year == 2026)
+            ).sum()
+        )
+        return n, min(n / 100, 0.75)
+    except Exception as exc:
+        logger.warning(f"Could not compute blend weight: {exc}")
+        return 0, 0.0
+
+
 @app.on_event("startup")
 def load_models() -> None:
     """Load the stacking ensemble and Dixon-Coles model once at startup."""
@@ -70,6 +105,46 @@ def load_models() -> None:
             logger.error(f"Failed to load Dixon-Coles: {exc}")
     else:
         logger.warning(f"Dixon-Coles model not found at {dc_path}. Live scorelines disabled.")
+
+    # LightGBM — retrained after each matchday
+    app.state.lgbm              = None
+    app.state.lgbm_blend_weight = 0.0
+    app.state.lgbm_n_wc_matches = 0
+
+    lgbm_path = _find_latest_lgbm()
+    if lgbm_path and lgbm_path.exists():
+        try:
+            import joblib
+            app.state.lgbm = joblib.load(str(lgbm_path))
+            n_wc, weight   = _compute_blend_weight()
+            app.state.lgbm_n_wc_matches = n_wc
+            app.state.lgbm_blend_weight = weight
+            logger.info(
+                f"LightGBM loaded: {lgbm_path.name} | "
+                f"WC 2026 matches: {n_wc} | blend: {weight:.0%}"
+            )
+        except Exception as exc:
+            logger.error(f"Failed to load LightGBM: {exc} — ensemble only")
+    else:
+        logger.info("No LightGBM model found — predictions use ensemble only")
+
+
+@app.post("/api/reload-models")
+def reload_models_endpoint() -> dict:
+    """
+    Reload all ML models from disk and clear the prediction cache.
+    Called automatically by the pipeline after each successful retrain.
+    """
+    from src.api.predict_service import predict_matchup
+    load_models()
+    predict_matchup.cache_clear()
+    logger.info("Models reloaded and prediction cache cleared")
+    return {
+        "status":              "reloaded",
+        "lgbm_blend_weight":   app.state.lgbm_blend_weight,
+        "lgbm_n_wc_matches":   app.state.lgbm_n_wc_matches,
+        "lgbm_loaded":         app.state.lgbm is not None,
+    }
 
 
 @app.get("/api/health")

@@ -39,6 +39,14 @@ def _load_live_sim() -> dict:
     return load_simulation(required=False)
 
 
+def _strip_projection(name: str) -> str:
+    return name[1:] if name.startswith("~") else name
+
+
+def _match_pair_key(team_a: str, team_b: str) -> tuple[str, str]:
+    return tuple(sorted([_strip_projection(team_a), _strip_projection(team_b)]))
+
+
 def _round_key(round_str: str) -> str:
     """Map round string to a short key for the frontend tabs."""
     r = round_str.lower()
@@ -390,6 +398,18 @@ def get_tournament_bracket() -> TournamentBracket:
 
     for mid, pred in preds.items():
         status = pred.get("status", "predicted")
+        round_key = _round_key(pred.get("round", ""))
+        pair_key = (round_key, _match_pair_key(
+            pred.get("team_a", ""), pred.get("team_b", "")
+        ))
+        if mid not in all_matches and status == "predicted":
+            duplicate = any(
+                _round_key(m["round"]) == round_key
+                and _match_pair_key(m["team_a"], m["team_b"]) == pair_key[1]
+                for m in all_matches.values()
+            )
+            if duplicate:
+                continue
         if mid in all_matches:
             prev = all_matches[mid]
             if pred.get("p_team_a_win") is not None:
