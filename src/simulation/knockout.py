@@ -36,8 +36,8 @@ QF_FROM_R16: list[tuple[int, int]] = [
 ]
 
 SF_FROM_QF: list[tuple[int, int]] = [
-    (0, 1),  # M101: W97 vs W99  (left half)
-    (2, 3),  # M102: W98 vs W100 (right half)
+    (0, 2),  # M101: W97 vs W98  (top half: QF1 vs QF3)
+    (1, 3),  # M102: W99 vs W100 (bottom half: QF2 vs QF4)
 ]
 
 

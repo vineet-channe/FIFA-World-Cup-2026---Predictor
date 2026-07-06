@@ -47,7 +47,7 @@ from src.features.pipeline import FEATURE_COLS_TREES, FEATURE_COLS_LINEAR
 from src.features.elo_features import get_elo_on_date
 
 from .group_stage import simulate_group, get_group_standings, select_best_third_place
-from .knockout import build_r32_bracket, simulate_knockout_round
+from .knockout import build_r32_bracket, simulate_knockout_round, SF_FROM_QF
 
 # Suppress sklearn feature-name warnings during batch inference
 warnings.filterwarnings("ignore", message="X does not have valid feature names")
@@ -349,7 +349,11 @@ def simulate_one_tournament(
         exit_round[team] = "semi"
 
     # ─── Semi-finals ──────────────────────────────────────────────────────
-    sf_pairs  = list(zip(qf_winners[0::2], qf_winners[1::2]))
+    sf_pairs = [
+        (qf_winners[i], qf_winners[j])
+        for i, j in SF_FROM_QF
+        if i < len(qf_winners) and j < len(qf_winners)
+    ]
     sf_result = simulate_knockout_round(sf_pairs, prob_cache, dc_cache, elo_ratings)
     sf_winners = sf_result["winners"]
     sf_losers  = [
