@@ -8,6 +8,7 @@ or:
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -16,11 +17,12 @@ _ROOT = Path(__file__).resolve().parent.parent.parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
+from apscheduler.schedulers.background import BackgroundScheduler
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
-from src.api.routers import model, predict, simulation, story, teams
+from src.api.routers import admin, model, predict, simulation, story, teams
 
 app = FastAPI(
     title="WC 2026 Predictor API",
@@ -28,9 +30,13 @@ app = FastAPI(
     version="1.0.0",
 )
 
+_default_origins = ["http://localhost:3000", "http://127.0.0.1:3000"]
+_env_origins = os.getenv("CORS_ALLOWED_ORIGINS", "")
+_extra_origins = [o.strip() for o in _env_origins.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=_default_origins + _extra_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -40,6 +46,9 @@ app.include_router(simulation.router, prefix="/api")
 app.include_router(predict.router,    prefix="/api")
 app.include_router(model.router,      prefix="/api")
 app.include_router(story.router,      prefix="/api")
+app.include_router(admin.router,      prefix="/api")
+
+_scheduler: BackgroundScheduler | None = None
 
 
 def _find_latest_lgbm() -> Path | None:
@@ -128,6 +137,35 @@ def load_models() -> None:
             logger.error(f"Failed to load LightGBM: {exc} — ensemble only")
     else:
         logger.info("No LightGBM model found — predictions use ensemble only")
+
+
+@app.on_event("startup")
+def start_background_scheduler() -> None:
+    """
+    Starts the live-retrain scheduler inside the API process, so a single
+    deployed service handles both serving requests and the periodic
+    pipeline runs. Controlled by ENABLE_SCHEDULER env var (default: on) —
+    set to "false" to disable automatic runs and rely on manual triggering
+    only via POST /api/admin/run-pipeline.
+    """
+    global _scheduler
+    if os.getenv("ENABLE_SCHEDULER", "true").lower() == "false":
+        logger.info("ENABLE_SCHEDULER=false — automatic scheduling disabled")
+        return
+    try:
+        from src.retraining.scheduler import build_scheduler
+        _scheduler = build_scheduler()
+        _scheduler.start()
+        logger.info("Background scheduler started — runs at 23:30 and 02:30 UTC")
+    except Exception as exc:
+        logger.error(f"Could not start background scheduler: {exc}")
+
+
+@app.on_event("shutdown")
+def stop_background_scheduler() -> None:
+    global _scheduler
+    if _scheduler is not None:
+        _scheduler.shutdown(wait=False)
 
 
 @app.post("/api/reload-models")

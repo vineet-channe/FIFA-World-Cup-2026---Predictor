@@ -27,7 +27,6 @@ statsmodels==0.14.1
 
 # ML — deep learning
 torch==2.2.0
-torchvision==0.17.0
 
 # Hyperparameter optimisation
 optuna==3.5.0
@@ -53,6 +52,7 @@ apscheduler==3.10.4
 # Utilities
 python-dotenv==1.0.1
 pydantic==2.6.0
+pydantic-settings==2.1.0
 loguru==0.7.2
 tqdm==4.66.2
 PyYAML==6.0.1

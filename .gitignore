@@ -73,7 +73,8 @@ wc2026.db
 # --- ML experiment tracking & trained artifacts ---
 mlruns/
 mlflow/mlruns/
-models/
+/models/
+backups/
 *.pkl
 *.pickle
 *.joblib

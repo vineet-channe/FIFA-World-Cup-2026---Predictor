@@ -5,6 +5,7 @@ validates → simulates remaining matches → saves snapshots.
 Target: complete in under 4 minutes per run.
 """
 import time
+from contextlib import nullcontext
 from pathlib import Path
 
 import joblib
@@ -39,6 +40,13 @@ from src.retraining.snapshots import (
 )
 
 
+def _safe_mlflow(fn, *args, **kwargs) -> None:
+    try:
+        fn(*args, **kwargs)
+    except Exception as exc:
+        logger.warning(f"MLflow log failed ({exc})")
+
+
 class LiveRetrainPipeline:
     def __init__(self):
         logger.info("Loading models...")
@@ -54,17 +62,25 @@ class LiveRetrainPipeline:
         t0 = time.time()
         logger.info("=== LiveRetrainPipeline starting ===")
 
-        mlflow.set_experiment("wc2026_phase6")
-        with mlflow.start_run(
-            run_name=f"live_retrain_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}",
-        ):
+        run_ctx = nullcontext()
+        try:
+            mlflow.set_experiment("wc2026_phase6")
+            run_ctx = mlflow.start_run(
+                run_name=f"live_retrain_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}",
+            )
+        except Exception as exc:
+            logger.warning(
+                f"MLflow unavailable ({exc}) — continuing without experiment tracking"
+            )
+
+        with run_ctx:
             all_fixtures = get_all_fixtures()
             fixtures = completed_fixtures(all_fixtures)
             standings = get_standings()
             bracket = enrich_knockout_fixtures(get_bracket(), all_fixtures)
             save_raw_results(all_fixtures)
-            mlflow.log_metric("n_completed_fixtures", len(fixtures))
-            mlflow.log_metric("n_total_fixtures", len(all_fixtures))
+            _safe_mlflow(mlflow.log_metric, "n_completed_fixtures", len(fixtures))
+            _safe_mlflow(mlflow.log_metric, "n_total_fixtures", len(all_fixtures))
             logger.info(
                 f"Ingested: {len(fixtures)} completed fixtures "
                 f"({sum(1 for f in fixtures if f['round'] == 'Round of 32')} R32)"
@@ -103,8 +119,8 @@ class LiveRetrainPipeline:
             brier = validate_on_recent_wc(new_lgbm, fm_extended, n=10)
             deploy, reason = should_deploy(brier)
             logger.info(f"Guardrail: {reason}")
-            mlflow.log_metric("brier_recent_wc", brier if brier else -1)
-            mlflow.log_param("deployed", deploy)
+            _safe_mlflow(mlflow.log_metric, "brier_recent_wc", brier if brier else -1)
+            _safe_mlflow(mlflow.log_param, "deployed", deploy)
 
             if deploy:
                 self.current_lgbm = new_lgbm
@@ -125,8 +141,8 @@ class LiveRetrainPipeline:
                 f"Blend: LightGBM {lgbm_blend_weight:.0%} / "
                 f"Ensemble {1 - lgbm_blend_weight:.0%}"
             )
-            mlflow.log_metric("n_wc2026_matches", n_wc2026_matches)
-            mlflow.log_metric("lgbm_blend_weight", lgbm_blend_weight)
+            _safe_mlflow(mlflow.log_metric, "n_wc2026_matches", n_wc2026_matches)
+            _safe_mlflow(mlflow.log_metric, "lgbm_blend_weight", lgbm_blend_weight)
 
             state = build_tournament_state(fixtures, standings, bracket)
 
@@ -144,7 +160,8 @@ class LiveRetrainPipeline:
                 lgbm_model=self.current_lgbm,
                 lgbm_blend_weight=lgbm_blend_weight,
             )
-            mlflow.log_metric(
+            _safe_mlflow(
+                mlflow.log_metric,
                 "teams_remaining",
                 sum(
                     1
@@ -162,7 +179,7 @@ class LiveRetrainPipeline:
             milestone = should_save_named_snapshot(output, existing)
             if milestone:
                 save_snapshot(stage=milestone, simulation=output, model_version=model_ver)
-                mlflow.log_param("milestone_snapshot", milestone)
+                _safe_mlflow(mlflow.log_param, "milestone_snapshot", milestone)
 
             # Reload API models so /api/predict uses the updated LightGBM blend
             try:
@@ -180,6 +197,6 @@ class LiveRetrainPipeline:
 
             elapsed = time.time() - t0
             logger.info(f"=== Pipeline complete in {elapsed:.1f}s ===")
-            mlflow.log_metric("pipeline_duration_s", elapsed)
+            _safe_mlflow(mlflow.log_metric, "pipeline_duration_s", elapsed)
 
         return output

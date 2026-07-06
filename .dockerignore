@@ -1,0 +1,10 @@
+data/
+models/
+web/node_modules/
+web/.next/
+.git/
+__pycache__/
+*.pyc
+.env
+mlruns/
+logs/
