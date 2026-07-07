@@ -181,22 +181,63 @@ class LiveRetrainPipeline:
                 save_snapshot(stage=milestone, simulation=output, model_version=model_ver)
                 _safe_mlflow(mlflow.log_param, "milestone_snapshot", milestone)
 
-            # Reload API models so /api/predict uses the updated LightGBM blend
-            try:
-                import requests as _requests
-                api_port = getattr(settings, "API_PORT", 8000)
-                _requests.post(
-                    f"http://localhost:{api_port}/api/reload-models",
-                    timeout=5,
-                )
-                logger.info("API models reloaded — predictor will use updated blend")
-            except Exception as _e:
-                logger.warning(
-                    f"Could not auto-reload API models: {_e} — restart 'make api' to apply blend"
-                )
+            # Reload API models so /api/predict uses the updated LightGBM blend.
+            # Two scenarios:
+            #   1. Pipeline runs *inside* the API process (Railway scheduler or
+            #      the /api/admin/run-pipeline endpoint) — reload directly in
+            #      memory. This is reliable regardless of which port uvicorn
+            #      bound to, so it works on Railway where $PORT != 8000.
+            #   2. Pipeline runs as a *separate* process (local `make pipeline`
+            #      while `make api` serves) — fall back to an HTTP call against
+            #      the running server, using $PORT so it also works on Railway.
+            self._reload_api_models()
 
             elapsed = time.time() - t0
             logger.info(f"=== Pipeline complete in {elapsed:.1f}s ===")
             _safe_mlflow(mlflow.log_metric, "pipeline_duration_s", elapsed)
 
         return output
+
+    @staticmethod
+    def _reload_api_models() -> None:
+        """
+        Refresh the live API's in-memory models + prediction cache after a
+        retrain, so /api/predict serves the newly trained LightGBM blend.
+
+        Prefers an in-process reload (works even when uvicorn is bound to an
+        arbitrary $PORT, e.g. on Railway); falls back to an HTTP call for the
+        separate-process case (local `make pipeline`).
+        """
+        import sys
+
+        # Scenario 1 — same process as the API server (Railway scheduler /
+        # admin endpoint). src.api.main is already imported by uvicorn.
+        main_mod = sys.modules.get("src.api.main")
+        if main_mod is not None and hasattr(main_mod, "load_models"):
+            try:
+                main_mod.load_models()
+                from src.api.predict_service import predict_matchup
+                predict_matchup.cache_clear()
+                logger.info(
+                    "API models reloaded in-process — predictor will use updated blend"
+                )
+                return
+            except Exception as exc:
+                logger.warning(f"In-process model reload failed ({exc}) — trying HTTP")
+
+        # Scenario 2 — separate process. POST to the running server. Use $PORT
+        # so this also works on Railway (falls back to 8000 for local dev).
+        try:
+            import os
+            import requests as _requests
+
+            api_port = os.getenv("PORT") or getattr(settings, "API_PORT", 8000)
+            _requests.post(
+                f"http://localhost:{api_port}/api/reload-models",
+                timeout=5,
+            )
+            logger.info("API models reloaded via HTTP — predictor will use updated blend")
+        except Exception as exc:
+            logger.warning(
+                f"Could not auto-reload API models: {exc} — restart the API to apply blend"
+            )
