@@ -160,7 +160,7 @@ def start_background_scheduler() -> None:
         from src.retraining.scheduler import build_scheduler
         _scheduler = build_scheduler()
         _scheduler.start()
-        logger.info("Background scheduler started — runs at 23:30 and 02:30 UTC")
+        logger.info("Background scheduler started — runs daily at 10:00 IST")
     except Exception as exc:
         logger.error(f"Could not start background scheduler: {exc}")
 

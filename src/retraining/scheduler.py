@@ -1,7 +1,5 @@
 """
-Background scheduler — triggers pipeline.run() after each daily match window.
-WC 2026 matches kick off at 17:00, 20:00, and 23:00 UTC.
-Two daily runs catch all windows.
+Background scheduler — triggers pipeline.run() once daily at 10:00 IST.
 
 Every run is wrapped so a failure is logged and recorded to run_status.json
 instead of silently vanishing into APScheduler's default exception handling.
@@ -37,23 +35,14 @@ def _on_job_error(event):
 
 
 def build_scheduler(n_sim: int = 10_000) -> BackgroundScheduler:
-    scheduler = BackgroundScheduler(timezone="UTC")
+    scheduler = BackgroundScheduler(timezone="Asia/Kolkata")
     scheduler.add_listener(_on_job_error, EVENT_JOB_ERROR)
 
     scheduler.add_job(
         func=_guarded_run,
         trigger="cron",
-        hour=23, minute=30,
-        id="evening_update",
-        args=[n_sim],
-        misfire_grace_time=1800,
-    )
-
-    scheduler.add_job(
-        func=_guarded_run,
-        trigger="cron",
-        hour=2, minute=30,
-        id="morning_update",
+        hour=10, minute=0,
+        id="daily_update",
         args=[n_sim],
         misfire_grace_time=1800,
     )

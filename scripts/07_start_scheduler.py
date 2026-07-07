@@ -15,7 +15,7 @@ from src.retraining.scheduler import build_scheduler
 
 scheduler = build_scheduler()
 scheduler.start()
-print("Scheduler running. Triggers at 23:30 UTC and 02:30 UTC daily.")
+print("Scheduler running. Triggers daily at 10:00 IST.")
 print("Press Ctrl+C to stop.")
 try:
     while True:

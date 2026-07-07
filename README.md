@@ -259,7 +259,7 @@ All prediction and simulation data lives on a persistent volume, independent of 
 │       ├── retrain.py         Fast LightGBM retrain
 │       ├── live_simulation.py Re-simulates from the tournament's real state
 │       ├── pipeline.py        Orchestrates the full retrain cycle
-│       ├── scheduler.py       Runs the pipeline automatically twice daily
+│       ├── scheduler.py       Runs the pipeline automatically daily at 10:00 IST
 │       └── snapshots.py       Milestone + full-history snapshot system
 │
 ├── scripts/                   One-off and operational scripts (training,
@@ -317,7 +317,7 @@ Model artifacts (`models/*.pkl`) and processed data (`data/processed/*.parquet`)
 
 - **Frontend** — deployed on [Vercel](https://vercel.com), auto-deployed from this repository's `web/` directory
 - **Backend** — deployed on [Railway](https://railway.app) as a single Docker container with an attached persistent volume, running both the API and the retraining scheduler in one process
-- Live retraining runs automatically twice daily during the tournament, with a manual, token-protected trigger endpoint available for on-demand updates after a specific match result
+- Live retraining runs automatically once daily at 10:00 IST during the tournament, with a manual, token-protected trigger endpoint available for on-demand updates after a specific match result
 
 ---
 
