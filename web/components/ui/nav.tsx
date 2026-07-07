@@ -6,12 +6,12 @@ import { usePathname } from "next/navigation";
 import { clsx } from "clsx";
 
 const NAV_ITEMS = [
-  { href: "/",          label: "Favourites", icon: "🏆" },
-  { href: "/tournament", label: "Tournament", icon: "⚽" },
-  { href: "/predictor", label: "Predictor",  icon: "🔮" },
-  { href: "/teams",     label: "Teams",      icon: "📊" },
-  { href: "/story",     label: "Story",      icon: "📖" },
-  { href: "/lab",       label: "Lab",        icon: "🧪" },
+  { href: "/",           label: "Favourites" },
+  { href: "/tournament", label: "Tournament" },
+  { href: "/predictor",  label: "Predictor" },
+  { href: "/teams",      label: "Teams" },
+  { href: "/story",      label: "Story" },
+  { href: "/lab",        label: "Lab" },
 ];
 
 export function Nav() {
@@ -82,21 +82,20 @@ export function Nav() {
       {/* ── Mobile bottom tab bar ── */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 flex border-t bg-[var(--ink-raised)]"
         style={{ borderColor: "var(--line)" }}>
-        {NAV_ITEMS.map(({ href, label, icon }) => {
+        {NAV_ITEMS.map(({ href, label }) => {
           const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
           return (
             <Link
               key={href}
               href={href}
               className={clsx(
-                "flex-1 flex flex-col items-center justify-center py-2 gap-0.5 text-xs transition-colors duration-150",
+                "flex-1 flex items-center justify-center px-0.5 py-2.5 text-[10px] leading-tight text-center font-medium transition-colors duration-150",
                 active
                   ? "text-[var(--turf-bright)]"
                   : "text-[var(--chalk)] opacity-50"
               )}
             >
-              <span className="text-lg leading-none">{icon}</span>
-              <span className="font-medium">{label}</span>
+              {label}
             </Link>
           );
         })}
