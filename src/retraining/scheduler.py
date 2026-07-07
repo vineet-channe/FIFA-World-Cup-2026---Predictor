@@ -16,9 +16,11 @@ from src.retraining.run_status import (
 )
 
 
-def _guarded_run(pipeline: LiveRetrainPipeline, n_sim: int) -> None:
+def _guarded_run(n_sim: int) -> None:
+    """Build the pipeline lazily so models aren't held in RAM between runs."""
     record_run_start()
     try:
+        pipeline = LiveRetrainPipeline()
         output = pipeline.run(n_sim=n_sim)
         n_matches = len(output.get("actual_results", {}))
         record_run_success(n_matches_ingested=n_matches)
@@ -35,7 +37,6 @@ def _on_job_error(event):
 
 
 def build_scheduler(n_sim: int = 10_000) -> BackgroundScheduler:
-    pipeline = LiveRetrainPipeline()
     scheduler = BackgroundScheduler(timezone="UTC")
     scheduler.add_listener(_on_job_error, EVENT_JOB_ERROR)
 
@@ -44,7 +45,7 @@ def build_scheduler(n_sim: int = 10_000) -> BackgroundScheduler:
         trigger="cron",
         hour=23, minute=30,
         id="evening_update",
-        args=[pipeline, n_sim],
+        args=[n_sim],
         misfire_grace_time=1800,
     )
 
@@ -53,7 +54,7 @@ def build_scheduler(n_sim: int = 10_000) -> BackgroundScheduler:
         trigger="cron",
         hour=2, minute=30,
         id="morning_update",
-        args=[pipeline, n_sim],
+        args=[n_sim],
         misfire_grace_time=1800,
     )
 

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { Nav } from "@/components/ui/nav";
+import { Footer } from "@/components/ui/footer";
 import { LiveStatusBar } from "@/components/ui/live-status-bar";
 
 export const metadata: Metadata = {
@@ -27,6 +28,7 @@ export default function RootLayout({
         />
       </head>
       <body
+        className="flex flex-col"
         style={{
           minHeight: "100dvh",
           backgroundColor: "var(--ink)",
@@ -37,7 +39,8 @@ export default function RootLayout({
         <Nav />
         <LiveStatusBar />
         {/* pb-20 reserves space for mobile bottom nav */}
-        <main className="pb-20 md:pb-0">{children}</main>
+        <main className="flex-1 pb-20 md:pb-0">{children}</main>
+        <Footer />
       </body>
     </html>
   );

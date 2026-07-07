@@ -22,6 +22,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
+from config.settings import settings
 from src.api.routers import admin, model, predict, simulation, story, teams
 
 app = FastAPI(
@@ -53,7 +54,7 @@ _scheduler: BackgroundScheduler | None = None
 
 def _find_latest_lgbm() -> Path | None:
     """Return the most recently modified LightGBM model file, or None."""
-    model_dir = _ROOT / "models"
+    model_dir = settings.MODEL_DIR
     live_models = sorted(
         model_dir.glob("lightgbm_live_*.pkl"),
         key=lambda p: p.stat().st_mtime,
@@ -69,7 +70,7 @@ def _compute_blend_weight() -> tuple[int, float]:
     """Count WC 2026 matches in the feature matrix and compute blend weight."""
     try:
         import pandas as pd
-        fm_path = _ROOT / "data" / "processed" / "feature_matrix.parquet"
+        fm_path = settings.DATA_DIR / "processed" / "feature_matrix.parquet"
         if not fm_path.exists():
             return 0, 0.0
         fm = pd.read_parquet(fm_path, columns=["tournament", "match_date"])
@@ -95,8 +96,8 @@ def load_models() -> None:
     app.state.ensemble = None
     app.state.dc_model = None
 
-    ensemble_path = _ROOT / "models" / "ensemble_v1.pkl"
-    dc_path = _ROOT / "models" / "dixon_coles_v1.json"
+    ensemble_path = settings.MODEL_DIR / "ensemble_v1.pkl"
+    dc_path = settings.MODEL_DIR / "dixon_coles_v1.json"
 
     if ensemble_path.exists():
         try:
