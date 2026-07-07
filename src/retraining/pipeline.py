@@ -181,6 +181,11 @@ class LiveRetrainPipeline:
                 save_snapshot(stage=milestone, simulation=output, model_version=model_ver)
                 _safe_mlflow(mlflow.log_param, "milestone_snapshot", milestone)
 
+            # Drop pipeline-held models before reloading the API. Simulation
+            # output is already on disk; releasing these avoids holding two full
+            # model sets in RAM during load_models() (OOM on Railway).
+            self._release_models()
+
             # Reload API models so /api/predict uses the updated LightGBM blend.
             # Two scenarios:
             #   1. Pipeline runs *inside* the API process (Railway scheduler or
@@ -197,6 +202,16 @@ class LiveRetrainPipeline:
             _safe_mlflow(mlflow.log_metric, "pipeline_duration_s", elapsed)
 
         return output
+
+    def _release_models(self) -> None:
+        """Free pipeline model references before API reload to reduce peak RAM."""
+        import gc
+
+        self.ensemble = None
+        self.dc_model = None
+        self.current_lgbm = None
+        gc.collect()
+        logger.info("Pipeline models released from memory")
 
     @staticmethod
     def _reload_api_models() -> None:

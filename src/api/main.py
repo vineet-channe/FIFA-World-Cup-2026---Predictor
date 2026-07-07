@@ -90,11 +90,15 @@ def _compute_blend_weight() -> tuple[int, float]:
 @app.on_event("startup")
 def load_models() -> None:
     """Load the stacking ensemble and Dixon-Coles model once at startup."""
+    import gc
+
     from src.models.dixon_coles import DixonColesModel
     from src.models.ensemble import load_ensemble
 
     app.state.ensemble = None
     app.state.dc_model = None
+    app.state.lgbm = None
+    gc.collect()
 
     ensemble_path = settings.MODEL_DIR / "ensemble_v1.pkl"
     dc_path = settings.MODEL_DIR / "dixon_coles_v1.json"
@@ -118,7 +122,6 @@ def load_models() -> None:
         logger.warning(f"Dixon-Coles model not found at {dc_path}. Live scorelines disabled.")
 
     # LightGBM — retrained after each matchday
-    app.state.lgbm              = None
     app.state.lgbm_blend_weight = 0.0
     app.state.lgbm_n_wc_matches = 0
 
