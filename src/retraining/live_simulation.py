@@ -108,69 +108,6 @@ def _record_slot(
     acc["n"] += 1
 
 
-def _sf_slot_outcomes(
-    acc: dict,
-    min_certainty: float = 0.40,
-) -> tuple[str, str]:
-    """Winner and loser for one semi-final bracket slot."""
-    if acc["n"] == 0:
-        return "TBD", "TBD"
-
-    team_a, count_a = acc["teams_a"].most_common(1)[0]
-    team_b, count_b = acc["teams_b"].most_common(1)[0]
-    cert_a = count_a / acc["n"]
-    cert_b = count_b / acc["n"]
-
-    team_wins: Counter = acc.get("team_wins", Counter())
-    w_a = team_wins.get(team_a, 0)
-    w_b = team_wins.get(team_b, 0)
-    if w_a + w_b > 0:
-        winner, loser = (team_a, team_b) if w_a >= w_b else (team_b, team_a)
-        cert_w = cert_a if winner == team_a else cert_b
-        cert_l = cert_b if loser == team_b else cert_a
-    elif acc["wins_a"] >= acc["wins_b"]:
-        winner, loser, cert_w, cert_l = team_a, team_b, cert_a, cert_b
-    else:
-        winner, loser, cert_w, cert_l = team_b, team_a, cert_b, cert_a
-
-    def _label(team: str, cert: float) -> str:
-        return team if cert >= min_certainty else f"~{team}"
-
-    return _label(winner, cert_w), _label(loser, cert_l)
-
-
-def _crossover_match_prediction(
-    team_a: str,
-    team_b: str,
-    round_name: str,
-    prob_cache: dict | None = None,
-) -> dict | None:
-    """Build a knockout match row from two bracket-fed teams (Final / 3rd place)."""
-    if team_a in ("TBD", "") or team_b in ("TBD", ""):
-        return None
-
-    raw_a = _strip_projection(team_a)
-    raw_b = _strip_projection(team_b)
-
-    p_a, p_d, p_b = 0.33, 0.33, 0.34
-    if prob_cache:
-        proba = prob_cache.get((raw_a, raw_b))
-        if proba is not None:
-            p_a, p_d, p_b = float(proba[2]), float(proba[1]), float(proba[0])
-
-    return {
-        "team_a": team_a,
-        "team_b": team_b,
-        "round": round_name,
-        "status": "predicted",
-        "p_team_a_win": round(p_a, 3),
-        "p_draw": round(p_d, 3),
-        "p_team_b_win": round(p_b, 3),
-        "expected_score_a": 1.2,
-        "expected_score_b": 1.1,
-    }
-
-
 def _acc_to_prediction(
     acc: dict,
     round_name: str,
@@ -795,21 +732,13 @@ def run_live_simulation(
         if pred:
             downstream[f"sf_{i + 1}"] = pred
 
-    if 0 in sf_acc and 1 in sf_acc:
-        sf1_w, sf1_l = _sf_slot_outcomes(sf_acc[0])
-        sf2_w, sf2_l = _sf_slot_outcomes(sf_acc[1])
+    pred_fin = _acc_to_prediction(fin_acc, "Final")
+    if pred_fin:
+        downstream["final_match"] = pred_fin
 
-        pred_fin = _crossover_match_prediction(
-            sf1_w, sf2_w, "Final", prob_cache=prob_cache
-        )
-        if pred_fin:
-            downstream["final_match"] = pred_fin
-
-        pred_3rd = _crossover_match_prediction(
-            sf1_l, sf2_l, "3rd Place", prob_cache=prob_cache
-        )
-        if pred_3rd:
-            downstream["3rd_place"] = pred_3rd
+    pred_3rd = _acc_to_prediction(tpp_acc, "3rd Place")
+    if pred_3rd:
+        downstream["3rd_place"] = pred_3rd
 
     completed_pairs = {
         _match_pair_key(m["team_a"], m["team_b"])
