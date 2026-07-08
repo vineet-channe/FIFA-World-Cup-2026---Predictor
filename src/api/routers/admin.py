@@ -34,7 +34,15 @@ def run_pipeline_now(x_admin_token: str | None = Header(default=None)):
     _check_admin_token(x_admin_token)
     try:
         from src.retraining.pipeline import LiveRetrainPipeline
-        pipeline = LiveRetrainPipeline()
+        from src.api.main import app as _app
+
+        ensemble = getattr(_app.state, "ensemble", None)
+        dc_model = getattr(_app.state, "dc_model", None)
+        lgbm     = getattr(_app.state, "lgbm", None)
+
+        pipeline = LiveRetrainPipeline(
+            ensemble=ensemble, dc_model=dc_model, lgbm=lgbm
+        )
         output = pipeline.run()
         n_results = len(output.get("actual_results", {}))
         logger.info(f"Manual pipeline run complete via /api/admin/run-pipeline — {n_results} results")

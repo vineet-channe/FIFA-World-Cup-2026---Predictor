@@ -33,13 +33,47 @@ def record_run_failure(error: str) -> None:
     })
 
 
+# Pipeline runs normally complete in 2-4 minutes. Any "running" status
+# older than this is almost certainly a crashed/killed process that never
+# got the chance to call record_run_failure() — not a run still in progress.
+MAX_EXPECTED_RUNTIME_MINUTES = 15
+
+
 def get_run_status() -> dict:
-    """Returns the last recorded run outcome. Never raises."""
+    """Returns the last recorded run outcome. Never raises.
+
+    A "running" status older than MAX_EXPECTED_RUNTIME_MINUTES is reported
+    as "failed" instead — this handles processes killed mid-run (e.g. by
+    an OOM kill) that never reached record_run_failure().
+    """
     default = {"status": "unknown", "finished_at": None, "error": None}
     try:
-        return {**default, **_read()}
+        data = {**default, **_read()}
     except Exception:
         return default
+
+    if data.get("status") == "running":
+        started_at = data.get("started_at")
+        if started_at:
+            try:
+                started = datetime.fromisoformat(started_at)
+                if started.tzinfo is None:
+                    started = started.replace(tzinfo=timezone.utc)
+                age_minutes = (datetime.now(timezone.utc) - started).total_seconds() / 60
+                if age_minutes > MAX_EXPECTED_RUNTIME_MINUTES:
+                    return {
+                        **data,
+                        "status": "failed",
+                        "error": (
+                            f"Run started {age_minutes:.0f} min ago and never "
+                            f"completed — likely killed mid-run (e.g. OOM). "
+                            f"Original started_at: {started_at}"
+                        ),
+                    }
+            except Exception:
+                pass
+
+    return data
 
 
 def _now() -> str:

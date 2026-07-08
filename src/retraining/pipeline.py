@@ -48,15 +48,36 @@ def _safe_mlflow(fn, *args, **kwargs) -> None:
 
 
 class LiveRetrainPipeline:
-    def __init__(self):
-        logger.info("Loading models...")
-        self.ensemble = load_ensemble(str(settings.MODEL_DIR / "ensemble_v1.pkl"))
-        self.dc_model = DixonColesModel.load(
-            str(settings.MODEL_DIR / "dixon_coles_v1.json")
-        )
-        self.current_lgbm_path = settings.MODEL_DIR / "lightgbm_v1.pkl"
-        self.current_lgbm = joblib.load(self.current_lgbm_path)
-        logger.info("Models loaded.")
+    def __init__(self, ensemble=None, dc_model=None, lgbm=None):
+        """
+        ensemble / dc_model / lgbm can be passed in to reuse models the
+        caller already has loaded in memory (e.g. the FastAPI process's
+        app.state), avoiding a second, redundant load of the same ~140MB+
+        ensemble file. This is what prevents duplicate model copies from
+        coexisting in memory during a live pipeline run — the root cause
+        of an OOM kill observed in production.
+
+        If any argument is omitted, that model is loaded fresh from disk,
+        preserving standalone usage from scripts that construct this class
+        with no arguments.
+        """
+        if ensemble is not None and dc_model is not None and lgbm is not None:
+            logger.info("Reusing already-loaded models (no duplicate load).")
+            self.ensemble = ensemble
+            self.dc_model = dc_model
+            self.current_lgbm_path = settings.MODEL_DIR / "lightgbm_v1.pkl"
+            self.current_lgbm = lgbm
+        else:
+            logger.info("Loading models from disk (no pre-loaded models provided)...")
+            self.ensemble = ensemble or load_ensemble(
+                str(settings.MODEL_DIR / "ensemble_v1.pkl")
+            )
+            self.dc_model = dc_model or DixonColesModel.load(
+                str(settings.MODEL_DIR / "dixon_coles_v1.json")
+            )
+            self.current_lgbm_path = settings.MODEL_DIR / "lightgbm_v1.pkl"
+            self.current_lgbm = lgbm or joblib.load(self.current_lgbm_path)
+            logger.info("Models loaded.")
 
     def run(self, n_sim: int = 10_000) -> dict:
         t0 = time.time()

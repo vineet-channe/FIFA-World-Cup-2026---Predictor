@@ -15,10 +15,22 @@ from src.retraining.run_status import (
 
 
 def _guarded_run(n_sim: int) -> None:
-    """Build the pipeline lazily so models aren't held in RAM between runs."""
+    """
+    Reuses models already loaded in the FastAPI process's app.state instead
+    of loading a second copy — this is what prevents the pipeline run from
+    roughly doubling model memory usage at its peak, which previously
+    caused an OOM kill on Railway.
+    """
     record_run_start()
     try:
-        pipeline = LiveRetrainPipeline()
+        from src.api.main import app as _app
+        ensemble = getattr(_app.state, "ensemble", None)
+        dc_model = getattr(_app.state, "dc_model", None)
+        lgbm     = getattr(_app.state, "lgbm", None)
+
+        pipeline = LiveRetrainPipeline(
+            ensemble=ensemble, dc_model=dc_model, lgbm=lgbm
+        )
         output = pipeline.run(n_sim=n_sim)
         n_matches = len(output.get("actual_results", {}))
         record_run_success(n_matches_ingested=n_matches)
