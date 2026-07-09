@@ -35,14 +35,6 @@ export async function LiveStatusBar() {
   const round   = meta.current_round ?? "Pre-tournament";
   const updated = formatUpdated(meta.last_updated ?? meta.last_simulation);
 
-  const showWarning = meta.is_stale || meta.run_status === "failed";
-  const warningText =
-    meta.run_status === "failed"
-      ? "⚠ Last update attempt failed — showing most recent successful data"
-      : meta.is_stale
-      ? "⚠ Data may be stale — no update in over 18 hours"
-      : null;
-
   return (
     <div
       className="hidden md:flex items-center justify-between px-6 py-1.5 text-xs font-mono border-b"
@@ -51,9 +43,6 @@ export async function LiveStatusBar() {
       <span>⚡ Last updated: {updated}</span>
       <span>{round}</span>
       <span>{played} / {total} matches played</span>
-      {showWarning && (
-        <span style={{ color: "var(--amber)" }}>{warningText}</span>
-      )}
     </div>
   );
 }

@@ -146,23 +146,32 @@ def load_models() -> None:
 @app.on_event("startup")
 def start_background_scheduler() -> None:
     """
-    Starts the live-retrain scheduler inside the API process, so a single
-    deployed service handles both serving requests and the periodic
-    pipeline runs. Controlled by ENABLE_SCHEDULER env var (default: on) —
-    set to "false" to disable automatic runs and rely on manual triggering
-    only via POST /api/admin/run-pipeline.
+    Automatic scheduling is currently DISABLED at the code level — pipeline
+    runs are triggered manually only, via POST /api/admin/run-pipeline.
+
+    To re-enable automatic runs (23:30 / 02:30 UTC), uncomment the block
+    below. The ENABLE_SCHEDULER env var check has been left in place so
+    re-enabling via environment variable alone (without a code change)
+    also works once this block is uncommented again.
     """
-    global _scheduler
-    if os.getenv("ENABLE_SCHEDULER", "true").lower() == "false":
-        logger.info("ENABLE_SCHEDULER=false — automatic scheduling disabled")
-        return
-    try:
-        from src.retraining.scheduler import build_scheduler
-        _scheduler = build_scheduler()
-        _scheduler.start()
-        logger.info("Background scheduler started — runs daily at 10:00 IST")
-    except Exception as exc:
-        logger.error(f"Could not start background scheduler: {exc}")
+    logger.info(
+        "Automatic scheduler is disabled at the code level — "
+        "manual triggering only via POST /api/admin/run-pipeline"
+    )
+    return
+
+    # --- Uncomment below to re-enable automatic scheduled pipeline runs ---
+    # global _scheduler
+    # if os.getenv("ENABLE_SCHEDULER", "true").lower() == "false":
+    #     logger.info("ENABLE_SCHEDULER=false — automatic scheduling disabled")
+    #     return
+    # try:
+    #     from src.retraining.scheduler import build_scheduler
+    #     _scheduler = build_scheduler()
+    #     _scheduler.start()
+    #     logger.info("Background scheduler started — runs at 23:30 and 02:30 UTC")
+    # except Exception as exc:
+    #     logger.error(f"Could not start background scheduler: {exc}")
 
 
 @app.on_event("shutdown")
