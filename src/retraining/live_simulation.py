@@ -70,6 +70,65 @@ def _orient_completed_match(
     return winner, sa, sb
 
 
+def _knockout_eliminations(actual_results: dict | None) -> dict[str, str]:
+    """Map eliminated team -> knockout round they were knocked out in."""
+    out: dict[str, str] = {}
+    if not actual_results:
+        return out
+    for res in actual_results.values():
+        if not res.get("played") or not res.get("winner"):
+            continue
+        rnd = res.get("round", "")
+        if rnd not in ("Round of 32", "Round of 16", "Quarter-finals", "Semi-finals"):
+            continue
+        ta, tb, winner = res["team_a"], res["team_b"], res["winner"]
+        loser = tb if winner == ta else ta if winner == tb else None
+        if loser:
+            out[loser] = rnd
+    return out
+
+
+_KNOCKOUT_ROUND_ORDER = [
+    "Round of 32",
+    "Round of 16",
+    "Quarter-finals",
+    "Semi-finals",
+    "3rd Place",
+    "Final",
+]
+_KNOCKOUT_ROUND_COUNTS = {
+    "Round of 32": 16,
+    "Round of 16": 8,
+    "Quarter-finals": 4,
+    "Semi-finals": 2,
+    "3rd Place": 1,
+    "Final": 1,
+}
+
+
+def _tournament_phase(actual_results: dict | None, fallback: str) -> str:
+    """Infer current tournament phase from completed knockout results."""
+    if not actual_results:
+        return fallback
+    completed: dict[str, int] = {}
+    for res in actual_results.values():
+        if res.get("played"):
+            rnd = res.get("round", "")
+            completed[rnd] = completed.get(rnd, 0) + 1
+
+    for rnd in reversed(_KNOCKOUT_ROUND_ORDER):
+        n = completed.get(rnd, 0)
+        if n <= 0:
+            continue
+        expected = _KNOCKOUT_ROUND_COUNTS.get(rnd)
+        if expected and n >= expected:
+            idx = _KNOCKOUT_ROUND_ORDER.index(rnd)
+            if idx + 1 < len(_KNOCKOUT_ROUND_ORDER):
+                return _KNOCKOUT_ROUND_ORDER[idx + 1]
+        return rnd
+    return fallback
+
+
 def _empty_slot_acc() -> dict:
     """One accumulator per bracket slot across all simulation runs."""
     return {
@@ -413,6 +472,11 @@ def run_live_simulation(
     completed_r32 = {m["fixture_id"]: m for m in ordered_r32 if m["status"] == "FT"}
     pending_r32 = [m for m in ordered_r32 if m["status"] != "FT"]
     completed_r16 = _build_completed_knockout(actual_results, "Round of 16")
+    completed_qf = _build_completed_knockout(actual_results, "Quarter-finals")
+    completed_sf = _build_completed_knockout(actual_results, "Semi-finals")
+    completed_tpp = _build_completed_knockout(actual_results, "3rd Place")
+    completed_fin = _build_completed_knockout(actual_results, "Final")
+    knockout_elim = _knockout_eliminations(actual_results)
 
     remaining_teams = list(
         {
@@ -567,6 +631,19 @@ def run_live_simulation(
             if not ta or not tb:
                 qf_winners.append(None)
                 continue
+            pair_key = _match_pair_key(ta, tb)
+            if pair_key in completed_qf:
+                winner, sa, sb = _orient_completed_match(
+                    ta, tb, completed_qf[pair_key]
+                )
+                _record_slot(qf_acc[slot], ta, tb, sa, sb, winner)
+                qf_winners.append(winner)
+                for t, gf, ga in [(ta, sa, sb), (tb, sb, sa)]:
+                    if t in counts:
+                        counts[t]["goals_for"] += gf
+                        counts[t]["goals_against"] += ga
+                        counts[t]["matches_played"] += 1
+                continue
             if ta not in elo_cache or tb not in elo_cache:
                 qf_winners.append(ta)
                 continue
@@ -588,6 +665,24 @@ def run_live_simulation(
             ta, tb = qf_winners[idx_a], qf_winners[idx_b]
             if not ta or not tb:
                 sf_winners.append(None)
+                continue
+            pair_key = _match_pair_key(ta, tb)
+            if pair_key in completed_sf:
+                winner, sa, sb = _orient_completed_match(
+                    ta, tb, completed_sf[pair_key]
+                )
+                loser = tb if winner == ta else ta
+                _record_slot(sf_acc[slot], ta, tb, sa, sb, winner)
+                sf_winners.append(winner)
+                sf_losers.append(loser)
+                for team in (ta, tb):
+                    if team in counts:
+                        counts[team]["semi"] += 1
+                for t, gf, ga in [(ta, sa, sb), (tb, sb, sa)]:
+                    if t in counts:
+                        counts[t]["goals_for"] += gf
+                        counts[t]["goals_against"] += ga
+                        counts[t]["matches_played"] += 1
                 continue
             if ta not in elo_cache or tb not in elo_cache:
                 sf_winners.append(ta)
@@ -611,7 +706,18 @@ def run_live_simulation(
         # ── 3rd place ─────────────────────────────────────────────────────────
         if len(sf_losers) >= 2:
             ta_3, tb_3 = sf_losers[0], sf_losers[1]
-            if ta_3 in elo_cache and tb_3 in elo_cache:
+            pair_key = _match_pair_key(ta_3, tb_3)
+            if pair_key in completed_tpp:
+                winner_3, sa_3, sb_3 = _orient_completed_match(
+                    ta_3, tb_3, completed_tpp[pair_key]
+                )
+                _record_slot(tpp_acc, ta_3, tb_3, sa_3, sb_3, winner_3)
+                for t, gf, ga in [(ta_3, sa_3, sb_3), (tb_3, sb_3, sa_3)]:
+                    if t in counts:
+                        counts[t]["goals_for"] += gf
+                        counts[t]["goals_against"] += ga
+                        counts[t]["matches_played"] += 1
+            elif ta_3 in elo_cache and tb_3 in elo_cache:
                 winner_3, sa_3, sb_3, _ = _simulate_knockout_match(
                     ta_3, tb_3, prob_cache, dc_cache, elo_cache
                 )
@@ -620,7 +726,23 @@ def run_live_simulation(
         # ── Final ─────────────────────────────────────────────────────────────
         if len(sf_winners) >= 2:
             ta_f, tb_f = sf_winners[0], sf_winners[1]
-            if ta_f and tb_f and ta_f in elo_cache and tb_f in elo_cache:
+            pair_key = _match_pair_key(ta_f, tb_f)
+            if pair_key in completed_fin:
+                winner_f, sa_f, sb_f = _orient_completed_match(
+                    ta_f, tb_f, completed_fin[pair_key]
+                )
+                _record_slot(fin_acc, ta_f, tb_f, sa_f, sb_f, winner_f)
+                if winner_f in counts:
+                    counts[winner_f]["champion"] += 1
+                for team in (ta_f, tb_f):
+                    if team in counts:
+                        counts[team]["final"] += 1
+                for t, gf, ga in [(ta_f, sa_f, sb_f), (tb_f, sb_f, sa_f)]:
+                    if t in counts:
+                        counts[t]["goals_for"] += gf
+                        counts[t]["goals_against"] += ga
+                        counts[t]["matches_played"] += 1
+            elif ta_f and tb_f and ta_f in elo_cache and tb_f in elo_cache:
                 winner_f, sa_f, sb_f, _ = _simulate_knockout_match(
                     ta_f, tb_f, prob_cache, dc_cache, elo_cache
                 )
@@ -650,8 +772,8 @@ def run_live_simulation(
         c = counts[team]
         mp = max(c["matches_played"], 1)
         in_r32 = any(team in (m["team_a"], m["team_b"]) for m in r32)
-        eliminated_in = None
-        if team in state.get("eliminated_teams", []):
+        eliminated_in = knockout_elim.get(team)
+        if not eliminated_in and team in state.get("eliminated_teams", []):
             eliminated_in = "Round of 32"
 
         team_probs[team] = {
@@ -775,7 +897,9 @@ def run_live_simulation(
                 if lgbm_blend_weight > 0
                 else "ensemble_v1+dixon_coles_v1"
             ),
-            "tournament_phase": state.get("current_round", "Round of 32"),
+            "tournament_phase": _tournament_phase(
+                actual_results, state.get("current_round", "Round of 32")
+            ),
         },
         "actual_results": actual_results or {},
         "group_stage_standings": state.get("group_standings", {}),
