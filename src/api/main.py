@@ -146,23 +146,27 @@ def load_models() -> None:
 @app.on_event("startup")
 def start_background_scheduler() -> None:
     """
-    Runs the match-based scheduler — one-time triggers, each firing 4 hours
-    after a remaining WC 2026 match's real kickoff time. See
-    src/retraining/scheduler.py's REMAINING_MATCH_SCHEDULE for the exact
-    UTC fire times. Manual triggering via POST /api/admin/run-pipeline
-    remains available at any time regardless of this schedule.
+    Automatic scheduling is DISABLED — pipeline runs are triggered manually
+    only, via POST /api/admin/run-pipeline.
     """
-    global _scheduler
-    if os.getenv("ENABLE_SCHEDULER", "true").lower() == "false":
-        logger.info("ENABLE_SCHEDULER=false — automatic scheduling disabled")
-        return
-    try:
-        from src.retraining.scheduler import build_match_schedule_scheduler
-        _scheduler = build_match_schedule_scheduler()
-        _scheduler.start()
-        logger.info("Match-based scheduler started — see logs above for exact fire times")
-    except Exception as exc:
-        logger.error(f"Could not start match-based scheduler: {exc}")
+    logger.info(
+        "Automatic scheduler is disabled — "
+        "manual triggering only via POST /api/admin/run-pipeline"
+    )
+    return
+
+    # --- Match-based scheduler (commented out — trigger manually instead) ---
+    # global _scheduler
+    # if os.getenv("ENABLE_SCHEDULER", "true").lower() == "false":
+    #     logger.info("ENABLE_SCHEDULER=false — automatic scheduling disabled")
+    #     return
+    # try:
+    #     from src.retraining.scheduler import build_match_schedule_scheduler
+    #     _scheduler = build_match_schedule_scheduler()
+    #     _scheduler.start()
+    #     logger.info("Match-based scheduler started — see logs above for exact fire times")
+    # except Exception as exc:
+    #     logger.error(f"Could not start match-based scheduler: {exc}")
 
 
 @app.on_event("shutdown")
