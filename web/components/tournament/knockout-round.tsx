@@ -188,11 +188,11 @@ function ProbabilityBar({
         }}
       >
         <span style={{ color: "var(--turf)" }}>
-          <FlipNumber value={pa * 100} format="decimal" decimals={0} />%
+          <FlipNumber value={pa * 100} format="decimal" decimals={1} />%
         </span>
-        <span>{(pd * 100).toFixed(0)}% draw</span>
+        <span>{(pd * 100).toFixed(1)}% draw</span>
         <span style={{ color: "var(--amber)" }}>
-          <FlipNumber value={pb * 100} format="decimal" decimals={0} />%
+          <FlipNumber value={pb * 100} format="decimal" decimals={1} />%
         </span>
       </div>
     </div>
